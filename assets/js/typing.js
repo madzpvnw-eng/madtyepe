@@ -10,6 +10,7 @@ export class TypingEngine {
     this.currentLineIndex = 0;
     this.currentCharIndex = 0;
     this.typedStatuses = []; // Array of boolean | null per character in active line
+    this.typedBuffer = []; // Actual characters typed by user for display in typing bar
     this.isLineCompleted = false;
     this.mode = options.mode || 'continuous'; // 'continuous' | 'line'
     this.wordsToType = options.wordsToType || 'all'; // 'all' | 'moderate' | 'light' | 'first_letters'
@@ -40,7 +41,7 @@ export class TypingEngine {
     this.hiddenInput = elements.hiddenInput;
   }
 
-  setLyrics(lyrics) {
+  setLyrics(lyrics, emptyMessage = '') {
     this.lyrics = lyrics || [];
     this.currentLineIndex = 0;
     this.currentCharIndex = 0;
@@ -50,7 +51,7 @@ export class TypingEngine {
     if (this.lyrics.length > 0) {
       this.initLine(0);
     } else {
-      this.renderEmpty();
+      this.renderEmpty(emptyMessage);
     }
   }
 
@@ -75,6 +76,7 @@ export class TypingEngine {
 
     const lineText = this.lyrics[index].text;
     this.typedStatuses = new Array(lineText.length).fill(null);
+    this.typedBuffer = new Array(lineText.length).fill('');
 
     // If moderate or light mode, pre-fill non-target words
     if (this.wordsToType === 'moderate' || this.wordsToType === 'light') {
@@ -88,11 +90,13 @@ export class TypingEngine {
           if (!mustType) {
             for (let c = 0; c < token.length; c++) {
               this.typedStatuses[charPos + c] = true;
+              this.typedBuffer[charPos + c] = lineText[charPos + c];
             }
           }
           wordIdx++;
         } else {
           this.typedStatuses[charPos] = true;
+          this.typedBuffer[charPos] = lineText[charPos];
         }
         charPos += token.length;
       }
@@ -160,10 +164,12 @@ export class TypingEngine {
       if (this.currentCharIndex > 0) {
         this.currentCharIndex--;
         this.typedStatuses[this.currentCharIndex] = null;
+        this.typedBuffer[this.currentCharIndex] = '';
         if (this.wordsToType === 'first_letters') {
           while (this.currentCharIndex > 0 && this.typedStatuses[this.currentCharIndex - 1] === true) {
             this.currentCharIndex--;
             this.typedStatuses[this.currentCharIndex] = null;
+            this.typedBuffer[this.currentCharIndex] = '';
           }
         }
         this.isLineCompleted = false;
@@ -191,6 +197,7 @@ export class TypingEngine {
     const isMatch = this.checkCharMatch(typedChar, expectedChar);
 
     this.typedStatuses[this.currentCharIndex] = isMatch;
+    this.typedBuffer[this.currentCharIndex] = typedChar;
     this.currentCharIndex++;
 
     this.onCharTyped(isMatch);
@@ -199,11 +206,13 @@ export class TypingEngine {
       // In first_letters mode: auto-complete the rest of this word!
       while (this.currentCharIndex < lineText.length && lineText[this.currentCharIndex] !== ' ' && !/[\.,!?;:\-]/.test(lineText[this.currentCharIndex])) {
         this.typedStatuses[this.currentCharIndex] = true;
+        this.typedBuffer[this.currentCharIndex] = lineText[this.currentCharIndex];
         this.currentCharIndex++;
       }
       // If next character is space or punctuation, auto-advance past it
       while (this.currentCharIndex < lineText.length && (lineText[this.currentCharIndex] === ' ' || /[\.,!?;:\-]/.test(lineText[this.currentCharIndex]))) {
         this.typedStatuses[this.currentCharIndex] = true;
+        this.typedBuffer[this.currentCharIndex] = lineText[this.currentCharIndex];
         this.currentCharIndex++;
       }
     } else if (isMatch && (this.wordsToType === 'moderate' || this.wordsToType === 'light')) {
@@ -339,6 +348,21 @@ export class TypingEngine {
       this.lineProgressFill.style.width = `${progress}%`;
     }
 
+    // 2b. Sync visible typed characters inside the typing input bar
+    if (this.hiddenInput) {
+      const displayValue = this.typedBuffer.slice(0, this.currentCharIndex).join('');
+      if (this.hiddenInput.value !== displayValue) {
+        this.hiddenInput.value = displayValue;
+      }
+      if (document.activeElement === this.hiddenInput) {
+        const len = displayValue.length;
+        try {
+          this.hiddenInput.setSelectionRange(len, len);
+        } catch (err) {}
+        this.hiddenInput.scrollLeft = this.hiddenInput.scrollWidth;
+      }
+    }
+
     // 3. Render Previous Line Preview (up to 2 previous lines)
     if (this.prevLineContainer) {
       const prevLines = [];
@@ -377,13 +401,16 @@ export class TypingEngine {
     });
   }
 
-  renderEmpty() {
+  renderEmpty(message = '') {
+    this.typedBuffer = [];
     if (this.activeLineContainer) {
-      this.activeLineContainer.innerHTML = '<span class="char untyped">Load a YouTube music video to start typing lyrics.</span>';
+      const msg = message || 'Muat video YouTube untuk mulai berlatih mengetik teks/lirik.';
+      this.activeLineContainer.innerHTML = `<span class="lyric-empty-message">${this.escapeHtml(msg)}</span>`;
     }
     if (this.prevLineContainer) this.prevLineContainer.innerHTML = '';
     if (this.nextLineContainer) this.nextLineContainer.innerHTML = '';
     if (this.lineProgressFill) this.lineProgressFill.style.width = '0%';
+    if (this.hiddenInput) this.hiddenInput.value = '';
   }
 
   escapeHtml(str) {

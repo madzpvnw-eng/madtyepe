@@ -10,6 +10,7 @@ import { StatisticsTracker } from './statistics.js';
 import { YouTubeController } from './youtube.js';
 import { LyricsManager } from './lyrics.js';
 import { TypingEngine } from './typing.js';
+import { AuthManager } from './auth.js';
 
 // Popular curated demo tracks inspired by video.vocatype.app/id/
 const DEMO_SONGS = [
@@ -19,47 +20,47 @@ const DEMO_SONGS = [
     videoId: '141HauTGBpQ',
     duration: 176,
     tag: 'Cinderella · Ang Boyfriend Kong Baduy',
-    translation: 'Pacar saya sangat suka pergi ke disko.',
+    translation: 'Pa, pa-pa-pa, pa-pa-pa-pa, pa-pa',
   },
   {
     title: 'Yellow',
     artist: 'Coldplay',
     videoId: 'yKNxeF4KMsY',
-    duration: 269,
+    duration: 273,
     tag: 'Coldplay · Yellow',
-    translation: 'Lihatlah bintang-bintang, lihat bagaimana mereka bersinar untukmu',
+    translation: 'Lihatlah bintang-bintang di langit',
   },
   {
     title: 'Bohemian Rhapsody',
     artist: 'Queen',
     videoId: 'fJ9rUzIMcZQ',
-    duration: 359,
+    duration: 355,
     tag: 'Queen · Bohemian Rhapsody',
-    translation: 'Apakah ini kehidupan nyata? Atau hanya sekadar fantasi?',
+    translation: 'Apakah ini kehidupan nyata?',
   },
   {
     title: 'Shape of You',
     artist: 'Ed Sheeran',
     videoId: 'JGwWNGJdvx8',
-    duration: 233,
+    duration: 263,
     tag: 'Ed Sheeran · Shape of You',
-    translation: 'Klub bukanlah tempat terbaik mencari kekasih, jadi aku pergi ke bar',
+    translation: 'Ed Sheeran — Shape of You',
   },
   {
     title: 'Never Gonna Give You Up',
     artist: 'Rick Astley',
     videoId: 'dQw4w9WgXcQ',
-    duration: 213,
+    duration: 214,
     tag: 'Rick Astley · Never Gonna Give You Up',
-    translation: 'Kita bukan orang asing dalam cinta, kau tahu aturannya dan aku pun begitu',
+    translation: 'Rick Astley — Never Gonna Give You Up',
   },
   {
     title: 'Blinding Lights',
     artist: 'The Weeknd',
     videoId: '4NRXx6U8ABQ',
-    duration: 200,
+    duration: 263,
     tag: 'The Weeknd · Blinding Lights',
-    translation: 'Kota ini dingin dan kosong, tak ada seorang pun di sekitarku',
+    translation: 'The Weeknd — Blinding Lights (Official Video)',
   },
 ];
 
@@ -73,16 +74,21 @@ class MadtypeApp {
     this.typingEngine = null;
     this.currentSong = null;
     this.isSeeking = false;
+    this.lastPlayerTime = 0;
     
     // Core game rule: song will pause and wait if current line hasn't been typed!
     this.waitForTyping = true;
     this.isWaitingForUser = false;
     this.showTranslations = true;
     this.autoReplayInterval = null;
+    this.isApplyingCloudPrefs = false;
+    this.sessionSavedForCurrentRun = false;
+    this.currentTypingMode = 'wait';
 
     this.initDOM();
     this.initTypingEngine();
     this.initYouTubePlayer();
+    this.initAuth();
     this.bindUIEvents();
     this.renderPopularSongPicker();
 
@@ -92,7 +98,8 @@ class MadtypeApp {
     this.applyWordsToType(this.settings.get('wordsToType') || 'all');
 
     // Load default song
-    this.loadSongById(DEMO_SONGS[0].videoId, DEMO_SONGS[0].title, DEMO_SONGS[0].artist);
+    const first = DEMO_SONGS[0];
+    this.loadSongById(first.videoId, first.title, first.artist, first.translation, first.duration);
   }
 
   initDOM() {
@@ -158,10 +165,16 @@ class MadtypeApp {
       settingsModal: document.getElementById('settings-modal'),
       toastContainer: document.getElementById('toast-container'),
 
-      // Video Picker Inputs
+      // Video Picker & Lyrics Match Inputs
       customUrlInput: document.getElementById('custom-youtube-url-input'),
       loadCustomUrlBtn: document.getElementById('load-custom-url-btn'),
       popularSongsList: document.getElementById('popular-songs-list'),
+      openSyncTextBtn: document.getElementById('open-sync-text-btn'),
+      lyricsManualSearchInput: document.getElementById('lyrics-manual-search-input'),
+      lyricsManualSearchBtn: document.getElementById('lyrics-manual-search-btn'),
+      lyricsCandidatesList: document.getElementById('lyrics-candidates-list'),
+      customTranscriptTextarea: document.getElementById('custom-transcript-textarea'),
+      applyCustomTranscriptBtn: document.getElementById('apply-custom-transcript-btn'),
 
       // Results Modal Elements
       resultSongTitle: document.getElementById('result-song-title'),
@@ -187,7 +200,65 @@ class MadtypeApp {
       themeIconSun: document.getElementById('theme-icon-sun'),
       themeIconMoon: document.getElementById('theme-icon-moon'),
       customThemeMode: document.getElementById('custom-theme-mode'),
+
+      // Header Navigation & Auth / Account / History / Favorites
+      headerStatsBtn: document.getElementById('header-stats-btn'),
+      headerFavBtn: document.getElementById('header-fav-btn'),
+      openSettingsIconBtn: document.getElementById('open-settings-icon-btn'),
+      headerAuthBtn: document.getElementById('header-auth-btn'),
+      headerAuthAvatar: document.getElementById('header-auth-avatar'),
+      headerAuthGoogleIcon: document.getElementById('header-auth-google-icon'),
+      headerAuthLabel: document.getElementById('header-auth-label'),
+
+      accountModal: document.getElementById('account-modal'),
+      accountSignedOutView: document.getElementById('account-signed-out-view'),
+      accountSignedInView: document.getElementById('account-signed-in-view'),
+      authErrorBanner: document.getElementById('auth-error-banner'),
+      googleSigninBtn: document.getElementById('google-signin-btn'),
+      googleSigninBtnText: document.getElementById('google-signin-btn-text'),
+      googleSignoutBtn: document.getElementById('google-signout-btn'),
+      accountProfileAvatar: document.getElementById('account-profile-avatar'),
+      accountProfileName: document.getElementById('account-profile-name'),
+      accountProfileEmail: document.getElementById('account-profile-email'),
+      accountTotalSessions: document.getElementById('account-total-sessions'),
+      accountBestWpm: document.getElementById('account-best-wpm'),
+      accountAvgAcc: document.getElementById('account-avg-acc'),
+      accountTotalFavs: document.getElementById('account-total-favs'),
+      accountOpenHistoryBtn: document.getElementById('account-open-history-btn'),
+
+      statsModal: document.getElementById('stats-modal'),
+      statsLiveWpm: document.getElementById('stats-live-wpm'),
+      statsLiveAcc: document.getElementById('stats-live-acc'),
+      historySessionsList: document.getElementById('history-sessions-list'),
+
+      favoritesModal: document.getElementById('favorites-modal'),
+      favCurrentTitle: document.getElementById('fav-current-title'),
+      favCurrentArtist: document.getElementById('fav-current-artist'),
+      toggleCurrentFavBtn: document.getElementById('toggle-current-fav-btn'),
+      favoritesSongsList: document.getElementById('favorites-songs-list'),
     };
+  }
+
+  initAuth() {
+    this.authManager = new AuthManager({
+      onAuthChanged: (user) => {
+        this.updateAuthUI(user);
+        this.renderHistoryList();
+        this.renderFavoritesList();
+      },
+      onProfileLoaded: (profile) => {
+        this.applyCloudPreferences(profile);
+      },
+      onSessionsUpdated: (sessions) => {
+        this.updateAccountSummary(sessions, this.authManager?.favorites || []);
+        this.renderHistoryList();
+      },
+      onFavoritesUpdated: (favorites) => {
+        this.updateAccountSummary(this.authManager?.sessions || [], favorites);
+        this.renderFavoritesList();
+        this.updateFavoriteHeartUI();
+      },
+    });
   }
 
   initTypingEngine() {
@@ -238,9 +309,13 @@ class MadtypeApp {
       onRender: ({ lineIndex, totalLines }) => {
         this.updateBarisCount(lineIndex + 1, totalLines);
         const curLine = this.lyricsManager.lyricsData[lineIndex];
-        if (curLine && this.dom.lyricTranslationText && this.showTranslations) {
-          if (curLine.translation) {
+        if (this.dom.lyricTranslationText) {
+          if (curLine && curLine.translation) {
             this.dom.lyricTranslationText.textContent = curLine.translation;
+          } else if (this.currentSong) {
+            this.dom.lyricTranslationText.textContent = `${this.currentSong.title} — ${this.currentSong.artist}`;
+          } else {
+            this.dom.lyricTranslationText.textContent = '';
           }
         }
       },
@@ -263,6 +338,9 @@ class MadtypeApp {
           this.dom.videoLoading.classList.add('hidden');
         }
         this.updateTimeDisplay(0, this.yt.getDuration());
+      },
+      onDurationReady: (duration, videoId) => {
+        this.handleDurationReady(duration, videoId);
       },
       onStateChange: (state) => {
         this.handlePlayerState(state);
@@ -291,21 +369,26 @@ class MadtypeApp {
           <span class="song-picker-item-title">${this.escapeHtml(song.title)}</span>
           <span class="song-picker-item-artist">${this.escapeHtml(song.artist)}</span>
         </div>
-        <span style="font-size: 0.76rem; color: var(--accent-cyan); font-weight: 600;">Pilih ▷</span>
+        <span style="font-size: 0.76rem; color: var(--accent-matte); font-weight: 600;">Pilih ▷</span>
       `;
       item.addEventListener('click', () => {
         this.closeAllModals();
-        this.loadSongById(song.videoId, song.title, song.artist, song.translation);
+        this.loadSongById(song.videoId, song.title, song.artist, song.translation, song.duration);
       });
       this.dom.popularSongsList.appendChild(item);
     });
   }
 
   bindUIEvents() {
-    // 1. Typing Input Bar events
+    // 1. Typing Input Bar events (keep visible typed buffer synchronized; prevent direct paste/IME drift)
     if (this.dom.typingInputBar) {
       this.dom.typingInputBar.addEventListener('input', () => {
-        this.dom.typingInputBar.value = '';
+        const expected = this.typingEngine.typedBuffer
+          .slice(0, this.typingEngine.currentCharIndex)
+          .join('');
+        if (this.dom.typingInputBar.value !== expected) {
+          this.dom.typingInputBar.value = expected;
+        }
       });
 
       // Keep focus on input bar on container click
@@ -395,6 +478,7 @@ class MadtypeApp {
       this.dom.toolbarPilihVideoBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         this.closeAllPopovers();
+        this.switchPickerTab('video');
         this.openModal(this.dom.videoPickerModal);
       });
     }
@@ -402,25 +486,105 @@ class MadtypeApp {
     const openPickerIcon = document.getElementById('open-video-picker-icon-btn');
     if (openPickerIcon) {
       openPickerIcon.addEventListener('click', () => {
+        this.switchPickerTab('video');
         this.openModal(this.dom.videoPickerModal);
       });
     }
 
+    if (this.dom.openSyncTextBtn) {
+      this.dom.openSyncTextBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeAllPopovers();
+        this.switchPickerTab('lyrics');
+        this.renderLyricsCandidates();
+        this.openModal(this.dom.videoPickerModal);
+      });
+    }
+
+    // Modal Tab switching
+    document.querySelectorAll('[data-picker-tab]').forEach(tabBtn => {
+      tabBtn.addEventListener('click', () => {
+        const tab = tabBtn.getAttribute('data-picker-tab');
+        this.switchPickerTab(tab);
+        if (tab === 'lyrics') {
+          this.renderLyricsCandidates();
+        }
+      });
+    });
+
+    // Manual LRCLIB search
+    const runManualLyricsSearch = async () => {
+      const q = (this.dom.lyricsManualSearchInput?.value || '').trim();
+      if (!q) {
+        this.showToast('Ketik judul lagu atau nama artis terlebih dahulu.', 'error');
+        return;
+      }
+      if (this.dom.lyricsCandidatesList) {
+        this.dom.lyricsCandidatesList.innerHTML = '<div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.82rem;">Mencari versi lirik di LRCLIB...</div>';
+      }
+      const ytDur = this.yt ? this.yt.getDuration() : (this.currentSong?.duration || 0);
+      const candidates = await this.lyricsManager.fetchLrclibCandidates('', q, ytDur, this.currentSong?.versionTags || [], q);
+      this.lyricsManager.candidateLyrics = candidates;
+      this.renderLyricsCandidates();
+    };
+
+    if (this.dom.lyricsManualSearchBtn) {
+      this.dom.lyricsManualSearchBtn.addEventListener('click', runManualLyricsSearch);
+    }
+    if (this.dom.lyricsManualSearchInput) {
+      this.dom.lyricsManualSearchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          runManualLyricsSearch();
+        }
+      });
+    }
+
+    // Apply custom pasted transcript / LRC / SRT
+    if (this.dom.applyCustomTranscriptBtn && this.dom.customTranscriptTextarea) {
+      this.dom.applyCustomTranscriptBtn.addEventListener('click', () => {
+        const raw = this.dom.customTranscriptTextarea.value;
+        const ytDur = this.yt ? this.yt.getDuration() : (this.currentSong?.duration || 0);
+        const parsed = this.lyricsManager.parseCustomText(raw, ytDur);
+        if (parsed.lyrics && parsed.lyrics.length > 0) {
+          this.applyLoadedLyricsResult({
+            success: true,
+            isSynced: parsed.isSynced,
+            lyrics: parsed.lyrics,
+            duration: ytDur,
+            trackInfo: this.currentSong || { title: 'Video YouTube', artist: 'Transkrip Kustom' },
+          });
+          this.closeAllModals();
+          this.showToast(`Berhasil menerapkan ${parsed.lyrics.length} baris teks ke video!`, 'success');
+        } else {
+          this.showToast('Teks kosong atau format tidak dikenali.', 'error');
+        }
+      });
+    }
+
     // Load custom URL
+    const loadUrlHandler = () => {
+      const url = this.dom.customUrlInput.value.trim();
+      if (!url) {
+        this.showToast('Masukkan link YouTube terlebih dahulu.', 'error');
+        return;
+      }
+      const videoId = this.yt.extractVideoId(url);
+      if (!videoId) {
+        this.showToast('Link YouTube tidak valid.', 'error');
+        return;
+      }
+      this.closeAllModals();
+      this.loadSongById(videoId);
+    };
+
     if (this.dom.loadCustomUrlBtn && this.dom.customUrlInput) {
-      this.dom.loadCustomUrlBtn.addEventListener('click', () => {
-        const url = this.dom.customUrlInput.value.trim();
-        if (!url) {
-          this.showToast('Masukkan link YouTube terlebih dahulu.', 'error');
-          return;
+      this.dom.loadCustomUrlBtn.addEventListener('click', loadUrlHandler);
+      this.dom.customUrlInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          loadUrlHandler();
         }
-        const videoId = this.yt.extractVideoId(url);
-        if (!videoId) {
-          this.showToast('Link YouTube tidak valid.', 'error');
-          return;
-        }
-        this.closeAllModals();
-        this.loadSongById(videoId);
       });
     }
 
@@ -604,17 +768,191 @@ class MadtypeApp {
       }
     });
 
-    // Settings inside modal
+    // Settings inside modal & Header action buttons
+    if (this.dom.openSettingsIconBtn) {
+      this.dom.openSettingsIconBtn.addEventListener('click', () => {
+        if (this.dom.modalOffsetVal) {
+          const offset = this.settings.get('syncOffset') || 0;
+          this.dom.modalOffsetVal.textContent = `${offset >= 0 ? '+' : ''}${offset.toFixed(1)}s`;
+        }
+        if (this.dom.settingWaitToggle) this.dom.settingWaitToggle.checked = this.waitForTyping;
+        if (this.dom.settingSfxToggle) this.dom.settingSfxToggle.checked = Boolean(this.settings.get('soundFx'));
+        this.openModal(this.dom.settingsModal);
+      });
+    }
+
+    if (this.dom.headerStatsBtn) {
+      this.dom.headerStatsBtn.addEventListener('click', () => {
+        const s = this.stats.getStats();
+        if (this.dom.statsLiveWpm) this.dom.statsLiveWpm.textContent = s.netWPM;
+        if (this.dom.statsLiveAcc) this.dom.statsLiveAcc.textContent = `${s.accuracy}%`;
+        this.renderHistoryList();
+        this.openModal(this.dom.statsModal);
+      });
+    }
+
+    if (this.dom.headerFavBtn) {
+      this.dom.headerFavBtn.addEventListener('click', () => {
+        this.updateFavoriteHeartUI();
+        this.renderFavoritesList();
+        this.openModal(this.dom.favoritesModal);
+      });
+    }
+
+    if (this.dom.headerAuthBtn) {
+      this.dom.headerAuthBtn.addEventListener('click', () => {
+        if (this.dom.authErrorBanner) {
+          this.dom.authErrorBanner.style.display = 'none';
+          this.dom.authErrorBanner.textContent = '';
+        }
+        this.openModal(this.dom.accountModal);
+      });
+    }
+
+    if (this.dom.googleSigninBtn) {
+      this.dom.googleSigninBtn.addEventListener('click', async () => {
+        if (this.dom.authErrorBanner) {
+          this.dom.authErrorBanner.style.display = 'none';
+        }
+        this.dom.googleSigninBtn.disabled = true;
+        if (this.dom.googleSigninBtnText) {
+          this.dom.googleSigninBtnText.textContent = 'Menghubungkan ke Google...';
+        }
+
+        const res = await this.authManager.signInWithGoogle();
+        this.dom.googleSigninBtn.disabled = false;
+        if (this.dom.googleSigninBtnText) {
+          this.dom.googleSigninBtnText.textContent = 'Masuk dengan Google';
+        }
+
+        if (res.success) {
+          const name = res.user?.displayName || res.user?.email || 'Pengguna';
+          this.showToast(`Berhasil masuk sebagai ${name}!`, 'success');
+          this.closeAllModals();
+        } else if (res.message) {
+          if (this.dom.authErrorBanner) {
+            this.dom.authErrorBanner.textContent = res.message;
+            this.dom.authErrorBanner.style.display = 'block';
+          }
+          this.showToast(res.message, 'error');
+        }
+      });
+    }
+
+    if (this.dom.googleSignoutBtn) {
+      this.dom.googleSignoutBtn.addEventListener('click', async () => {
+        try {
+          await this.authManager.signOutUser();
+          this.closeAllModals();
+          this.showToast('Anda telah keluar dari akun Google.', 'info');
+        } catch (err) {
+          this.showToast('Gagal keluar dari akun.', 'error');
+        }
+      });
+    }
+
+    if (this.dom.accountOpenHistoryBtn) {
+      this.dom.accountOpenHistoryBtn.addEventListener('click', () => {
+        this.closeAllModals();
+        const s = this.stats.getStats();
+        if (this.dom.statsLiveWpm) this.dom.statsLiveWpm.textContent = s.netWPM;
+        if (this.dom.statsLiveAcc) this.dom.statsLiveAcc.textContent = `${s.accuracy}%`;
+        this.renderHistoryList();
+        this.openModal(this.dom.statsModal);
+      });
+    }
+
+    if (this.dom.toggleCurrentFavBtn) {
+      this.dom.toggleCurrentFavBtn.addEventListener('click', async () => {
+        if (!this.currentSong) return;
+        const res = await this.authManager.toggleFavoriteSong(this.currentSong);
+        if (res.requiresAuth) {
+          this.closeAllModals();
+          this.openModal(this.dom.accountModal);
+          this.showToast('Masuk dengan Google untuk menyimpan lagu favorit!', 'info');
+          return;
+        }
+        if (res.success) {
+          this.updateFavoriteHeartUI();
+          this.showToast(
+            res.favorited
+              ? `"${this.currentSong.title}" ditambahkan ke favorit!`
+              : `"${this.currentSong.title}" dihapus dari favorit.`,
+            res.favorited ? 'success' : 'info'
+          );
+        }
+      });
+    }
+
+    // Modal close buttons & backdrop click
+    document.querySelectorAll('[data-close-modal]').forEach(btn => {
+      btn.addEventListener('click', () => this.closeAllModals());
+    });
+    document.querySelectorAll('.modal-overlay').forEach(overlay => {
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) this.closeAllModals();
+      });
+    });
+
+    // Results Modal actions
+    if (this.dom.resultPlayAgainBtn) {
+      this.dom.resultPlayAgainBtn.addEventListener('click', () => {
+        this.closeAllModals();
+        this.restartSession();
+      });
+    }
+    if (this.dom.resultPickAnotherBtn) {
+      this.dom.resultPickAnotherBtn.addEventListener('click', () => {
+        this.closeAllModals();
+        this.switchPickerTab('video');
+        this.openModal(this.dom.videoPickerModal);
+      });
+    }
+
+    // Sync offset controls
+    const updateOffsetDisplay = (val) => {
+      if (this.dom.modalOffsetVal) {
+        this.dom.modalOffsetVal.textContent = `${val >= 0 ? '+' : ''}${val.toFixed(1)}s`;
+      }
+    };
+    if (this.dom.modalOffsetMinus) {
+      this.dom.modalOffsetMinus.addEventListener('click', () => {
+        updateOffsetDisplay(this.settings.adjustSyncOffset(-0.5));
+      });
+    }
+    if (this.dom.modalOffsetPlus) {
+      this.dom.modalOffsetPlus.addEventListener('click', () => {
+        updateOffsetDisplay(this.settings.adjustSyncOffset(0.5));
+      });
+    }
+    if (this.dom.modalOffsetReset) {
+      this.dom.modalOffsetReset.addEventListener('click', () => {
+        updateOffsetDisplay(this.settings.resetSyncOffset());
+      });
+    }
+
     if (this.dom.settingWaitToggle) {
       this.dom.settingWaitToggle.addEventListener('change', (e) => {
         this.waitForTyping = e.target.checked;
+        this.syncPreferencesToCloud();
       });
     }
 
     if (this.dom.settingSfxToggle) {
       this.dom.settingSfxToggle.addEventListener('change', (e) => {
         this.settings.set('soundFx', e.target.checked);
+        this.syncPreferencesToCloud();
       });
+    }
+
+    if (this.dom.customAutoReplay) {
+      this.dom.customAutoReplay.addEventListener('change', () => this.syncPreferencesToCloud());
+    }
+    if (this.dom.customKeySound) {
+      this.dom.customKeySound.addEventListener('change', () => this.syncPreferencesToCloud());
+    }
+    if (this.dom.customErrorSound) {
+      this.dom.customErrorSound.addEventListener('change', () => this.syncPreferencesToCloud());
     }
 
     // Keyboard Global Shortcuts (Escape to pause/close)
@@ -684,6 +1022,7 @@ class MadtypeApp {
     if (this.dom.settingThemeSelect && this.dom.settingThemeSelect.value !== theme) {
       this.dom.settingThemeSelect.value = theme;
     }
+    this.syncPreferencesToCloud();
   }
 
   toggleTheme() {
@@ -724,6 +1063,7 @@ class MadtypeApp {
     }
 
     this.settings.set('fontFamily', cleanName);
+    this.syncPreferencesToCloud();
   }
 
   applyWordsToType(mode) {
@@ -741,18 +1081,22 @@ class MadtypeApp {
 
     this.typingEngine.setWordsToType(mode);
     this.settings.set('wordsToType', mode);
+    this.syncPreferencesToCloud();
 
-    const labels = {
-      all: 'All words (100%)',
-      moderate: 'Moderate (~55%)',
-      light: 'Light (~35%)',
-      first_letters: 'First letters only',
-    };
-    this.showToast(`Words to Type: ${labels[mode] || mode}`, 'info');
+    if (!this.isApplyingCloudPrefs) {
+      const labels = {
+        all: 'All words (100%)',
+        moderate: 'Moderate (~55%)',
+        light: 'Light (~35%)',
+        first_letters: 'First letters only',
+      };
+      this.showToast(`Words to Type: ${labels[mode] || mode}`, 'info');
+    }
   }
 
   applyTypingMode(mode) {
     if (!mode) return;
+    this.currentTypingMode = mode;
 
     if (this.dom.modeOptionsList) {
       this.dom.modeOptionsList.querySelectorAll('.popover-option-btn').forEach(btn => {
@@ -767,16 +1111,17 @@ class MadtypeApp {
     if (mode === 'wait') {
       this.waitForTyping = true;
       this.typingEngine.setMode('continuous');
-      this.showToast('Mode: Musik menunggu ketikan bait selesai', 'info');
+      if (!this.isApplyingCloudPrefs) this.showToast('Mode: Musik menunggu ketikan bait selesai', 'info');
     } else if (mode === 'continuous') {
       this.waitForTyping = false;
       this.typingEngine.setMode('continuous');
-      this.showToast('Mode: Musik berjalan bebas mengikuti lagu', 'info');
+      if (!this.isApplyingCloudPrefs) this.showToast('Mode: Musik berjalan bebas mengikuti lagu', 'info');
     } else if (mode === 'line') {
       this.waitForTyping = true;
       this.typingEngine.setMode('line');
-      this.showToast('Mode: Latihan satu baris mandiri', 'info');
+      if (!this.isApplyingCloudPrefs) this.showToast('Mode: Latihan satu baris mandiri', 'info');
     }
+    this.syncPreferencesToCloud();
   }
 
   applySubtitleMode(mode) {
@@ -823,48 +1168,168 @@ class MadtypeApp {
     }, seconds * 1000);
   }
 
+  switchPickerTab(tabName) {
+    document.querySelectorAll('[data-picker-tab]').forEach(btn => {
+      btn.classList.toggle('active', btn.getAttribute('data-picker-tab') === tabName);
+    });
+    const videoPanel = document.getElementById('picker-tab-video');
+    const lyricsPanel = document.getElementById('picker-tab-lyrics');
+    if (videoPanel) videoPanel.classList.toggle('active', tabName === 'video');
+    if (lyricsPanel) lyricsPanel.classList.toggle('active', tabName === 'lyrics');
+  }
+
+  renderLyricsCandidates() {
+    if (!this.dom.lyricsCandidatesList) return;
+    const candidates = this.lyricsManager.candidateLyrics || [];
+
+    if (candidates.length === 0) {
+      this.dom.lyricsCandidatesList.innerHTML = `
+        <div style="padding: 12px; text-align: center; color: var(--text-muted); font-size: 0.82rem;">
+          Belum ada versi lirik otomatis ditemukan. Coba cari manual di atas atau tempel transkrip YouTube di bawah.
+        </div>
+      `;
+      return;
+    }
+
+    this.dom.lyricsCandidatesList.innerHTML = '';
+    candidates.slice(0, 12).forEach(cand => {
+      const isSelected = String(cand.id) === String(this.lyricsManager.activeCandidateId);
+      const item = document.createElement('div');
+      item.className = `song-picker-item ${isSelected ? 'active-match' : ''}`;
+      const durText = cand.duration ? this.formatTime(cand.duration) : '--:--';
+      const syncTag = cand.syncedLyrics ? 'Synced' : 'Plain';
+
+      item.innerHTML = `
+        <div class="song-picker-item-info">
+          <span class="song-picker-item-title">${this.escapeHtml(cand.trackName || cand.name || 'Lagu')}</span>
+          <span class="song-picker-item-artist">${this.escapeHtml(cand.artistName || '')} · ${durText}</span>
+        </div>
+        <span class="lyric-badge-tag">${isSelected ? '✓ ' : ''}${syncTag}</span>
+      `;
+
+      item.addEventListener('click', () => {
+        const res = this.lyricsManager.applyCandidateById(cand.id);
+        if (res && res.success) {
+          this.applyLoadedLyricsResult(res);
+          this.renderLyricsCandidates();
+          this.showToast(`Lirik diganti ke: ${cand.trackName} (${durText})`, 'success');
+        }
+      });
+      this.dom.lyricsCandidatesList.appendChild(item);
+    });
+  }
+
+  handleDurationReady(duration, videoId) {
+    if (!this.currentSong || this.currentSong.videoId !== videoId) return;
+    this.currentSong.duration = duration;
+    this.updateTimeDisplay(this.yt ? this.yt.getCurrentTime() : 0, duration);
+
+    // If user hasn't typed yet and LRCLIB is active, re-verify best duration match!
+    if (this.stats.totalChars === 0 && this.lyricsManager.sourceType === 'lrclib') {
+      const updated = this.lyricsManager.reselectByDuration(
+        duration,
+        this.currentSong.title,
+        this.currentSong.artist,
+        this.currentSong.versionTags || []
+      );
+      if (updated && updated.success) {
+        this.applyLoadedLyricsResult(updated);
+        this.renderLyricsCandidates();
+      }
+    }
+  }
+
+  applyLoadedLyricsResult(res) {
+    if (!res || !res.lyrics || res.lyrics.length === 0) return;
+
+    this.clearAutoReplay();
+    this.isWaitingForUser = false;
+    if (this.dom.waitingBadge) this.dom.waitingBadge.classList.remove('active');
+
+    this.typingEngine.setLyrics(res.lyrics);
+    this.stats.reset();
+    this.stats.setTotalLines(res.lyrics.length);
+    this.updateHUDStats();
+    this.updateBarisCount(1, res.lyrics.length);
+
+    const ytDur = this.yt ? this.yt.getDuration() : 0;
+    const trackDuration = ytDur || res.duration || this.currentSong?.duration || 0;
+    this.updateTimeDisplay(0, trackDuration);
+
+    // Re-sync immediately if video is already playing partway through
+    if (this.yt && this.yt.getCurrentTime() > 0.5) {
+      const offset = this.settings.get('syncOffset');
+      const idx = this.lyricsManager.getActiveLineIndex(this.yt.getCurrentTime(), offset);
+      this.typingEngine.syncToLine(idx);
+      this.updateBarisCount(idx + 1, res.lyrics.length);
+    }
+  }
+
   /**
    * Loads a song, cues YouTube, queries LRCLIB for synced lyrics, and sets up typing
    */
-  async loadSongById(videoId, presetTitle = '', presetArtist = '', presetTranslation = '') {
+  async loadSongById(videoId, presetTitle = '', presetArtist = '', presetTranslation = '', presetDuration = 0) {
     if (this.dom.videoLoading) this.dom.videoLoading.classList.remove('hidden');
+
+    // Immediately clear old song's lyrics & state so mismatched text NEVER lingers!
+    this.clearAutoReplay();
+    this.isWaitingForUser = false;
+    this.sessionSavedForCurrentRun = false;
+    this.lastPlayerTime = 0;
+    if (this.dom.waitingBadge) this.dom.waitingBadge.classList.remove('active');
+    this.typingEngine.setLyrics([], 'Memuat teks & mencocokkan dengan video YouTube...');
+    this.stats.reset();
+    this.updateHUDStats();
+    this.updateBarisCount(0, 0);
 
     try {
       this.yt.loadVideo(videoId);
 
       let title = presetTitle;
       let artist = presetArtist;
+      let rawTitle = '';
+      let versionTags = [];
+      let duration = presetDuration || 0;
 
       if (!title || !artist) {
         const meta = await this.yt.fetchVideoMetadata(videoId);
+        rawTitle = meta.title || '';
         const cleaned = this.lyricsManager.cleanYouTubeTitle(meta.title, meta.author);
         title = cleaned.track || meta.title;
         artist = cleaned.artist || meta.author;
+        versionTags = cleaned.versionTags || [];
+        duration = meta.duration || duration || (this.yt ? this.yt.getDuration() : 0);
       }
 
-      this.currentSong = { videoId, title, artist };
+      this.currentSong = { videoId, title, artist, duration, rawTitle, versionTags };
+      this.updateFavoriteHeartUI();
+
+      if (this.dom.lyricsManualSearchInput) {
+        this.dom.lyricsManualSearchInput.value = `${artist} ${title}`.trim();
+      }
 
       // Update subtitle/translation
       if (this.dom.lyricTranslationText) {
-        this.dom.lyricTranslationText.textContent = presetTranslation || `${title} - ${artist}`;
+        this.dom.lyricTranslationText.textContent = presetTranslation || `${title} — ${artist}`;
       }
 
-      // Fetch LRCLIB lyrics
-      const res = await this.lyricsManager.fetchLyrics(artist, title);
+      // Fetch lyrics matching videoId + duration + title/artist
+      const res = await this.lyricsManager.fetchLyrics(artist, title, duration, {
+        videoId,
+        rawTitle,
+        versionTags,
+      });
 
       if (res.success && res.lyrics.length > 0) {
-        this.typingEngine.setLyrics(res.lyrics);
-        this.stats.reset();
-        this.stats.setTotalLines(res.lyrics.length);
-        this.updateBarisCount(1, res.lyrics.length);
-        
-        // Immediately initialize duration so timeline never shows 00:00 / 00:00
-        const trackDuration = res.duration || (this.yt ? this.yt.getDuration() : 0);
-        this.updateTimeDisplay(0, trackDuration);
-
-        this.showToast(`Lirik tersinkronisasi untuk "${title}"!`, 'success');
+        this.applyLoadedLyricsResult(res);
+        this.renderLyricsCandidates();
+        const modeLabel = res.isSynced ? 'tersinkronisasi' : 'teks (belum bertimestamp)';
+        this.showToast(`Teks ${modeLabel} dimuat untuk "${title}"!`, 'success');
       } else {
-        this.showToast(`Lirik tidak ditemukan di LRCLIB untuk "${title}".`, 'info');
+        this.typingEngine.setLyrics([], 'Teks/lirik otomatis tidak ditemukan. Klik "Video ▾ → Sesuaikan Teks / Lirik" untuk mencari atau menempel Transkrip YouTube.');
+        this.renderLyricsCandidates();
+        this.updateTimeDisplay(0, duration || (this.yt ? this.yt.getDuration() : 0));
+        this.showToast(`Lirik tidak ditemukan otomatis untuk "${title}". Anda bisa menempel transkrip YouTube.`, 'info');
       }
 
       // Focus input
@@ -874,6 +1339,7 @@ class MadtypeApp {
 
     } catch (err) {
       console.error('Error loading song:', err);
+      this.typingEngine.setLyrics([], 'Gagal memuat video atau teks.');
       this.showToast('Gagal memuat video atau lirik.', 'error');
     } finally {
       if (this.dom.videoLoading) this.dom.videoLoading.classList.add('hidden');
@@ -886,7 +1352,7 @@ class MadtypeApp {
    * The music pauses at the end of the current lyric beat if user hasn't finished typing!
    */
   handleGameplayTimeSync(currentTime) {
-    if (!this.lyricsManager.isSynced || !this.lyricsManager.lyricsData.length) return;
+    if (!this.lyricsManager.lyricsData.length) return;
 
     const offset = this.settings.get('syncOffset');
     const effectiveTime = currentTime - offset;
@@ -894,6 +1360,22 @@ class MadtypeApp {
     const currentLine = this.lyricsManager.lyricsData[currentIdx];
 
     if (!currentLine) return;
+
+    // Detect manual seek directly inside YouTube player iframe (jump > 1.8s)
+    const timeDelta = Math.abs(currentTime - this.lastPlayerTime);
+    this.lastPlayerTime = currentTime;
+
+    if (timeDelta > 1.8) {
+      const seekedIdx = this.lyricsManager.getActiveLineIndex(currentTime, offset);
+      if (seekedIdx !== currentIdx) {
+        this.clearAutoReplay();
+        this.isWaitingForUser = false;
+        if (this.dom.waitingBadge) this.dom.waitingBadge.classList.remove('active');
+        this.typingEngine.syncToLine(seekedIdx);
+        this.updateBarisCount(seekedIdx + 1, this.lyricsManager.lyricsData.length);
+        return;
+      }
+    }
 
     // If wait-for-typing mode is active:
     // Check if song has reached the end of this lyric line
@@ -981,12 +1463,32 @@ class MadtypeApp {
     if (this.dom.resultFinalStreak) this.dom.resultFinalStreak.textContent = s.highestStreak;
 
     this.openModal(this.dom.resultsModal);
+
+    // Save completed session to Firestore if signed in
+    if (!this.sessionSavedForCurrentRun && s.totalChars > 0 && this.authManager?.user && this.currentSong?.videoId) {
+      this.sessionSavedForCurrentRun = true;
+      this.authManager
+        .savePracticeSession({
+          videoId: this.currentSong.videoId,
+          songTitle: this.currentSong.title,
+          songArtist: this.currentSong.artist,
+          wpm: s.netWPM,
+          accuracy: s.accuracy,
+          correctChars: s.correctChars,
+          totalChars: s.totalChars,
+          highestStreak: s.highestStreak,
+          completedLines: this.typingEngine.currentLineIndex + 1,
+          totalLines: this.lyricsManager.lyricsData.length || 1,
+        })
+        .catch((err) => console.error('Failed to save session:', err));
+    }
   }
 
   restartSession() {
     this.clearAutoReplay();
     this.stats.reset();
     this.isWaitingForUser = false;
+    this.sessionSavedForCurrentRun = false;
     if (this.dom.waitingBadge) {
       this.dom.waitingBadge.classList.remove('active');
     }
@@ -997,6 +1499,233 @@ class MadtypeApp {
     }
     this.updateHUDStats();
     this.showToast('Latihan diulang dari awal!', 'info');
+  }
+
+  // =========================================================================
+  // Auth, Profile, Cloud Sync, History & Favorites UI Methods
+  // =========================================================================
+  syncPreferencesToCloud() {
+    if (this.isApplyingCloudPrefs || !this.authManager?.user) return;
+    this.authManager
+      .savePreferences({
+        theme: this.settings.get('theme') || 'dark',
+        fontFamily: this.settings.get('fontFamily') || 'Be Vietnam Pro',
+        wordsToType: this.settings.get('wordsToType') || 'all',
+        typingMode: this.currentTypingMode || 'wait',
+        autoReplay: this.settings.get('autoReplay') || '10',
+        keySound: this.settings.get('keySound') || 'medium',
+        errorSound: this.settings.get('errorSound') || 'error',
+        waitForTyping: this.waitForTyping,
+        soundFx: Boolean(this.settings.get('soundFx')),
+      })
+      .catch((err) => console.warn('Cloud preferences sync skipped:', err));
+  }
+
+  applyCloudPreferences(profile) {
+    if (!profile) return;
+    this.isApplyingCloudPrefs = true;
+    try {
+      if (profile.theme) this.applyTheme(profile.theme);
+      if (profile.fontFamily) this.applyPracticeFont(profile.fontFamily);
+      if (profile.wordsToType) this.applyWordsToType(profile.wordsToType);
+      if (profile.typingMode) this.applyTypingMode(profile.typingMode);
+      if (profile.autoReplay) {
+        this.settings.set('autoReplay', profile.autoReplay);
+        if (this.dom.customAutoReplay) this.dom.customAutoReplay.value = profile.autoReplay;
+      }
+      if (profile.keySound) {
+        this.settings.set('keySound', profile.keySound);
+        if (this.dom.customKeySound) this.dom.customKeySound.value = profile.keySound;
+      }
+      if (profile.errorSound) {
+        this.settings.set('errorSound', profile.errorSound);
+        if (this.dom.customErrorSound) this.dom.customErrorSound.value = profile.errorSound;
+      }
+      if (typeof profile.waitForTyping === 'boolean') {
+        this.waitForTyping = profile.waitForTyping;
+        if (this.dom.settingWaitToggle) this.dom.settingWaitToggle.checked = profile.waitForTyping;
+      }
+      if (typeof profile.soundFx === 'boolean') {
+        this.settings.set('soundFx', profile.soundFx);
+        if (this.dom.settingSfxToggle) this.dom.settingSfxToggle.checked = profile.soundFx;
+      }
+    } finally {
+      this.isApplyingCloudPrefs = false;
+    }
+  }
+
+  updateAuthUI(user) {
+    const renderAvatar = (container, displayName, photoURL) => {
+      if (!container) return;
+      if (photoURL) {
+        container.innerHTML = `<img src="${this.escapeHtml(photoURL)}" alt="${this.escapeHtml(displayName)}" referrerpolicy="no-referrer" />`;
+      } else {
+        const initials = (displayName || 'M').trim().charAt(0).toUpperCase();
+        container.textContent = initials;
+      }
+    };
+
+    if (user) {
+      const displayName = user.displayName || user.email?.split('@')[0] || 'Pengguna';
+      const firstName = displayName.split(' ')[0];
+
+      if (this.dom.headerAuthBtn) {
+        this.dom.headerAuthBtn.classList.add('signed-in');
+        this.dom.headerAuthBtn.title = `Akun Google: ${displayName}`;
+      }
+      if (this.dom.headerAuthGoogleIcon) this.dom.headerAuthGoogleIcon.style.display = 'none';
+      if (this.dom.headerAuthAvatar) {
+        this.dom.headerAuthAvatar.style.display = 'inline-flex';
+        renderAvatar(this.dom.headerAuthAvatar, displayName, user.photoURL);
+      }
+      if (this.dom.headerAuthLabel) this.dom.headerAuthLabel.textContent = firstName;
+
+      if (this.dom.accountSignedOutView) this.dom.accountSignedOutView.style.display = 'none';
+      if (this.dom.accountSignedInView) this.dom.accountSignedInView.style.display = 'flex';
+      if (this.dom.accountProfileName) this.dom.accountProfileName.textContent = displayName;
+      if (this.dom.accountProfileEmail) this.dom.accountProfileEmail.textContent = user.email || '';
+      renderAvatar(this.dom.accountProfileAvatar, displayName, user.photoURL);
+    } else {
+      if (this.dom.headerAuthBtn) {
+        this.dom.headerAuthBtn.classList.remove('signed-in');
+        this.dom.headerAuthBtn.title = 'Masuk dengan Google';
+      }
+      if (this.dom.headerAuthGoogleIcon) this.dom.headerAuthGoogleIcon.style.display = 'block';
+      if (this.dom.headerAuthAvatar) {
+        this.dom.headerAuthAvatar.style.display = 'none';
+        this.dom.headerAuthAvatar.innerHTML = '';
+      }
+      if (this.dom.headerAuthLabel) this.dom.headerAuthLabel.textContent = 'Masuk';
+
+      if (this.dom.accountSignedOutView) this.dom.accountSignedOutView.style.display = 'flex';
+      if (this.dom.accountSignedInView) this.dom.accountSignedInView.style.display = 'none';
+      this.updateAccountSummary([], []);
+    }
+  }
+
+  updateAccountSummary(sessions = [], favorites = []) {
+    if (this.dom.accountTotalSessions) this.dom.accountTotalSessions.textContent = sessions.length;
+    if (this.dom.accountTotalFavs) this.dom.accountTotalFavs.textContent = favorites.length;
+
+    const bestWpm = sessions.reduce((max, s) => Math.max(max, Number(s.wpm) || 0), 0);
+    const avgAcc =
+      sessions.length > 0
+        ? Math.round(sessions.reduce((sum, s) => sum + (Number(s.accuracy) || 0), 0) / sessions.length)
+        : 0;
+
+    if (this.dom.accountBestWpm) this.dom.accountBestWpm.textContent = bestWpm;
+    if (this.dom.accountAvgAcc) this.dom.accountAvgAcc.textContent = `${avgAcc}%`;
+  }
+
+  updateFavoriteHeartUI() {
+    const isFav = Boolean(this.currentSong?.videoId && this.authManager?.isFavorite(this.currentSong.videoId));
+    if (this.dom.headerFavBtn) {
+      this.dom.headerFavBtn.classList.toggle('favorited', isFav);
+    }
+    if (this.dom.favCurrentTitle) {
+      this.dom.favCurrentTitle.textContent = this.currentSong?.title || 'Belum ada lagu';
+    }
+    if (this.dom.favCurrentArtist) {
+      this.dom.favCurrentArtist.textContent = this.currentSong?.artist || '-';
+    }
+    if (this.dom.toggleCurrentFavBtn) {
+      this.dom.toggleCurrentFavBtn.textContent = isFav ? '♥ Tersimpan (Hapus)' : '♡ Simpan Favorit';
+    }
+  }
+
+  renderHistoryList() {
+    if (!this.dom.historySessionsList) return;
+
+    if (!this.authManager?.user) {
+      this.dom.historySessionsList.innerHTML = `
+        <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.84rem; display: flex; flex-direction: column; gap: 10px; align-items: center;">
+          <span>Masuk dengan Google untuk melihat riwayat latihan Anda yang tersimpan di cloud.</span>
+          <button type="button" id="history-prompt-login-btn" class="btn-cyan" style="height: 36px; font-size: 0.82rem;">Masuk dengan Google</button>
+        </div>
+      `;
+      document.getElementById('history-prompt-login-btn')?.addEventListener('click', () => {
+        this.closeAllModals();
+        this.openModal(this.dom.accountModal);
+      });
+      return;
+    }
+
+    const sessions = this.authManager.sessions || [];
+    if (sessions.length === 0) {
+      this.dom.historySessionsList.innerHTML = `
+        <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.84rem;">
+          Belum ada sesi selesai. Selesaikan satu lagu untuk mencatat rekor Anda!
+        </div>
+      `;
+      return;
+    }
+
+    this.dom.historySessionsList.innerHTML = '';
+    sessions.forEach((sess) => {
+      const item = document.createElement('div');
+      item.className = 'song-picker-item';
+      item.innerHTML = `
+        <div class="song-picker-item-info">
+          <span class="song-picker-item-title">${this.escapeHtml(sess.songTitle)}</span>
+          <span class="song-picker-item-artist">${this.escapeHtml(sess.songArtist || 'YouTube')} · ${sess.completedLines}/${sess.totalLines} baris</span>
+        </div>
+        <span class="lyric-badge-tag">${sess.wpm} WPM · ${sess.accuracy}%</span>
+      `;
+      item.addEventListener('click', () => {
+        if (sess.videoId) {
+          this.closeAllModals();
+          this.loadSongById(sess.videoId, sess.songTitle, sess.songArtist);
+        }
+      });
+      this.dom.historySessionsList.appendChild(item);
+    });
+  }
+
+  renderFavoritesList() {
+    if (!this.dom.favoritesSongsList) return;
+
+    if (!this.authManager?.user) {
+      this.dom.favoritesSongsList.innerHTML = `
+        <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.84rem; display: flex; flex-direction: column; gap: 10px; align-items: center;">
+          <span>Masuk dengan Google untuk menyimpan dan mengakses lagu YouTube favorit Anda.</span>
+          <button type="button" id="fav-prompt-login-btn" class="btn-cyan" style="height: 36px; font-size: 0.82rem;">Masuk dengan Google</button>
+        </div>
+      `;
+      document.getElementById('fav-prompt-login-btn')?.addEventListener('click', () => {
+        this.closeAllModals();
+        this.openModal(this.dom.accountModal);
+      });
+      return;
+    }
+
+    const favorites = this.authManager.favorites || [];
+    if (favorites.length === 0) {
+      this.dom.favoritesSongsList.innerHTML = `
+        <div style="padding: 16px; text-align: center; color: var(--text-muted); font-size: 0.84rem;">
+          Belum ada lagu favorit. Klik "Simpan Favorit" di atas untuk menandai lagu yang sedang diputar.
+        </div>
+      `;
+      return;
+    }
+
+    this.dom.favoritesSongsList.innerHTML = '';
+    favorites.forEach((fav) => {
+      const item = document.createElement('div');
+      item.className = 'song-picker-item';
+      const durText = fav.duration ? ` · ${this.formatTime(fav.duration)}` : '';
+      item.innerHTML = `
+        <div class="song-picker-item-info">
+          <span class="song-picker-item-title">${this.escapeHtml(fav.title)}</span>
+          <span class="song-picker-item-artist">${this.escapeHtml(fav.artist || 'YouTube')}${durText}</span>
+        </div>
+        <span class="lyric-badge-tag">Putar ▷</span>
+      `;
+      item.addEventListener('click', () => {
+        this.closeAllModals();
+        this.loadSongById(fav.videoId, fav.title, fav.artist, '', fav.duration || 0);
+      });
+      this.dom.favoritesSongsList.appendChild(item);
+    });
   }
 
   updateBarisCount(current, total) {

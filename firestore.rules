@@ -1,0 +1,235 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net: Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Global Primitives & Helpers
+    // =========================================================================
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidVideoId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 32 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function parentUserExists(userId) {
+      return exists(/databases/$(database)/documents/users/$(userId));
+    }
+
+    // =========================================================================
+    // Validation Blueprints (No existing() / diff() inside)
+    // =========================================================================
+    function isValidUserProfile(data) {
+      return data.keys().hasAll(['uid', 'displayName', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'photoURL',
+          'theme',
+          'fontFamily',
+          'wordsToType',
+          'typingMode',
+          'autoReplay',
+          'keySound',
+          'errorSound',
+          'waitForTyping',
+          'soundFx',
+          'createdAt',
+          'updatedAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 120
+        && (!('photoURL' in data) || (data.photoURL is string && data.photoURL.size() <= 500))
+        && (!('theme' in data) || (data.theme is string && data.theme in ['dark', 'light']))
+        && (!('fontFamily' in data) || (data.fontFamily is string && data.fontFamily.size() >= 1 && data.fontFamily.size() <= 80))
+        && (!('wordsToType' in data) || (data.wordsToType is string && data.wordsToType in ['all', 'moderate', 'light', 'first_letters']))
+        && (!('typingMode' in data) || (data.typingMode is string && data.typingMode in ['wait', 'continuous', 'line']))
+        && (!('autoReplay' in data) || (data.autoReplay is string && data.autoReplay in ['off', '5', '10', '15']))
+        && (!('keySound' in data) || (data.keySound is string && data.keySound in ['off', 'quiet', 'medium', 'loud']))
+        && (!('errorSound' in data) || (data.errorSound is string && data.errorSound in ['off', 'error', 'beep', 'thud']))
+        && (!('waitForTyping' in data) || data.waitForTyping is bool)
+        && (!('soundFx' in data) || data.soundFx is bool)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidUserPrivateInfo(data) {
+      return data.keys().hasAll(['uid', 'email', 'emailVerified', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['uid', 'email', 'emailVerified', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && data.emailVerified is bool
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPracticeSession(data) {
+      return data.keys().hasAll([
+          'uid', 'videoId', 'songTitle', 'songArtist',
+          'wpm', 'accuracy', 'correctChars', 'totalChars',
+          'highestStreak', 'completedLines', 'totalLines', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'uid', 'videoId', 'songTitle', 'songArtist',
+          'wpm', 'accuracy', 'correctChars', 'totalChars',
+          'highestStreak', 'completedLines', 'totalLines', 'createdAt'
+        ])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && isValidVideoId(data.videoId)
+        && data.songTitle is string && data.songTitle.size() >= 1 && data.songTitle.size() <= 200
+        && data.songArtist is string && data.songArtist.size() <= 160
+        && data.wpm is number && data.wpm >= 0 && data.wpm <= 500
+        && data.accuracy is number && data.accuracy >= 0 && data.accuracy <= 100
+        && data.correctChars is number && data.correctChars >= 0 && data.correctChars <= 100000
+        && data.totalChars is number && data.totalChars >= 0 && data.totalChars <= 100000
+        && data.highestStreak is number && data.highestStreak >= 0 && data.highestStreak <= 100000
+        && data.completedLines is number && data.completedLines >= 0 && data.completedLines <= 5000
+        && data.totalLines is number && data.totalLines >= 0 && data.totalLines <= 5000
+        && data.createdAt is timestamp;
+    }
+
+    function isValidFavoriteSong(data) {
+      return data.keys().hasAll(['uid', 'videoId', 'title', 'artist', 'duration', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'videoId', 'title', 'artist', 'duration', 'createdAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && isValidVideoId(data.videoId)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.artist is string && data.artist.size() <= 160
+        && data.duration is number && data.duration >= 0 && data.duration <= 86400
+        && data.createdAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection Rules
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isEmailVerified()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isEmailVerified()
+        && isValidId(userId)
+        && isOwner(userId)
+        && isValidUserProfile(incoming())
+        && incoming().uid == existing().uid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'photoURL', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'theme', 'fontFamily', 'wordsToType', 'typingMode',
+            'autoReplay', 'keySound', 'errorSound', 'waitForTyping',
+            'soundFx', 'updatedAt'
+          ]) ||
+          incoming().diff(existing()).affectedKeys().hasOnly([
+            'displayName', 'photoURL',
+            'theme', 'fontFamily', 'wordsToType', 'typingMode',
+            'autoReplay', 'keySound', 'errorSound', 'waitForTyping',
+            'soundFx', 'updatedAt'
+          ])
+        );
+
+      allow delete: if isEmailVerified() && isValidId(userId) && isOwner(userId);
+
+      // Isolated PII Subcollection
+      match /private/{docId} {
+        allow get: if isValidId(userId) && docId == 'info' && isOwner(userId) && parentUserExists(userId);
+        allow list: if false;
+
+        allow create: if isEmailVerified()
+          && isValidId(userId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if isEmailVerified()
+          && isValidId(userId)
+          && docId == 'info'
+          && isOwner(userId)
+          && isValidUserPrivateInfo(incoming())
+          && incoming().uid == existing().uid
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'emailVerified', 'updatedAt'])
+          && parentUserExists(userId);
+
+        allow delete: if isEmailVerified() && isValidId(userId) && docId == 'info' && isOwner(userId) && parentUserExists(userId);
+      }
+
+      // Completed Typing Practice Sessions
+      match /sessions/{sessionId} {
+        allow get: if isValidId(userId) && isValidId(sessionId) && isOwner(userId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.uid == request.auth.uid;
+
+        allow create: if isEmailVerified()
+          && isValidId(userId)
+          && isValidId(sessionId)
+          && isOwner(userId)
+          && isValidPracticeSession(incoming())
+          && incoming().createdAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if false;
+        allow delete: if isEmailVerified() && isValidId(userId) && isValidId(sessionId) && isOwner(userId) && parentUserExists(userId);
+      }
+
+      // Favorite YouTube Songs
+      match /favorites/{videoId} {
+        allow get: if isValidId(userId) && isValidVideoId(videoId) && isOwner(userId) && parentUserExists(userId);
+        allow list: if isOwner(userId) && resource.data.uid == request.auth.uid;
+
+        allow create: if isEmailVerified()
+          && isValidId(userId)
+          && isValidVideoId(videoId)
+          && isOwner(userId)
+          && isValidFavoriteSong(incoming())
+          && incoming().videoId == videoId
+          && incoming().createdAt == request.time
+          && parentUserExists(userId);
+
+        allow update: if false;
+        allow delete: if isEmailVerified() && isValidId(userId) && isValidVideoId(videoId) && isOwner(userId) && parentUserExists(userId);
+      }
+    }
+  }
+}

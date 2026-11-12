@@ -11,6 +11,7 @@ export class YouTubeController {
     this.onTimeUpdate = options.onTimeUpdate || (() => {});
     this.onError = options.onError || (() => {});
     this.onReady = options.onReady || (() => {});
+    this.onDurationReady = options.onDurationReady || (() => {});
 
     this.player = null;
     this.isApiReady = false;
@@ -18,6 +19,7 @@ export class YouTubeController {
     this.timeUpdateTimer = null;
     this.duration = 0;
     this.isReady = false;
+    this._notifiedDurationForVideo = null;
 
     this.loadIFrameApi();
   }
@@ -94,6 +96,8 @@ export class YouTubeController {
     }
 
     this.currentVideoId = videoId;
+    this.duration = 0;
+    this._notifiedDurationForVideo = null;
     this.stopTimeTicker();
 
     if (this.player && typeof this.player.loadVideoById === 'function') {
@@ -127,10 +131,11 @@ export class YouTubeController {
       events: {
         onReady: (event) => {
           this.isReady = true;
-          this.duration = this.player.getDuration() || 0;
+          this.checkAndNotifyDuration();
           this.onReady(event);
         },
         onStateChange: (event) => {
+          this.checkAndNotifyDuration();
           this.handleStateChange(event.data);
         },
         onError: (event) => {
@@ -138,6 +143,18 @@ export class YouTubeController {
         },
       },
     });
+  }
+
+  checkAndNotifyDuration() {
+    if (!this.player || typeof this.player.getDuration !== 'function') return;
+    const dur = this.player.getDuration() || 0;
+    if (dur > 0) {
+      this.duration = dur;
+      if (this._notifiedDurationForVideo !== this.currentVideoId) {
+        this._notifiedDurationForVideo = this.currentVideoId;
+        this.onDurationReady(dur, this.currentVideoId);
+      }
+    }
   }
 
   handleStateChange(state) {
@@ -244,14 +261,15 @@ export class YouTubeController {
    * Retrieves video title & author using player's video data or oEmbed
    */
   async fetchVideoMetadata(videoId) {
-    // 1. Try YouTube Player's internal metadata if ready
+    // 1. Try YouTube Player's internal metadata if it matches this videoId
     if (this.player && typeof this.player.getVideoData === 'function') {
       const data = this.player.getVideoData();
-      if (data && data.title) {
+      if (data && data.title && (!data.video_id || data.video_id === videoId)) {
         return {
           title: data.title,
           author: data.author || '',
           thumbnail: `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          duration: this.getDuration() || 0,
         };
       }
     }
@@ -266,6 +284,7 @@ export class YouTubeController {
           title: json.title || 'Unknown Title',
           author: json.author_name || '',
           thumbnail: json.thumbnail_url || `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`,
+          duration: this.getDuration() || 0,
         };
       }
     } catch (e) {

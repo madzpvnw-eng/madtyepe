@@ -74,12 +74,24 @@
             </svg>
           </button>
 
-          <!-- User / Profile Icon -->
-          <button type="button" class="voca-nav-icon" id="open-settings-icon-btn" title="Pengaturan" aria-label="Pengaturan">
+          <!-- Settings Icon -->
+          <button type="button" class="voca-nav-icon" id="open-settings-icon-btn" title="Pengaturan & Sinkronisasi" aria-label="Pengaturan">
             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
-              <circle cx="12" cy="7" r="4"/>
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
             </svg>
+          </button>
+
+          <!-- Google Account / Sign-In Button -->
+          <button type="button" class="header-auth-pill" id="header-auth-btn" title="Masuk dengan Google" aria-label="Akun Google">
+            <span id="header-auth-avatar" class="header-auth-avatar" style="display: none;"></span>
+            <svg id="header-auth-google-icon" class="google-g-svg" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+              <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/>
+              <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/>
+              <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/>
+            </svg>
+            <span id="header-auth-label" class="header-auth-label">Masuk</span>
           </button>
         </nav>
       </header>
@@ -342,6 +354,11 @@
                 <span class="option-check"></span>
               </button>
             </div>
+            <div class="popover-divider"></div>
+            <button type="button" id="open-sync-text-btn" class="popover-option-btn">
+              <span>Sesuaikan Teks Video...</span>
+              <span class="option-check">✎</span>
+            </button>
           </div>
 
         </div>
@@ -434,35 +451,90 @@
 
     <!-- ================= MODAL: PILIH VIDEO / LAGU ================= -->
     <div id="video-picker-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="picker-title">
-      <div class="modal-card">
+      <div class="modal-card" style="max-width: 560px;">
         <div class="modal-header">
-          <h2 id="picker-title" class="modal-title">Pilih Video & Lagu</h2>
+          <h2 id="picker-title" class="modal-title">Video &amp; Teks YouTube</h2>
           <button type="button" class="hud-btn" data-close-modal title="Tutup">✕</button>
         </div>
 
+        <div class="modal-tabs" role="tablist">
+          <button type="button" class="modal-tab-btn active" data-picker-tab="video" role="tab">Pilih Video</button>
+          <button type="button" class="modal-tab-btn" data-picker-tab="lyrics" role="tab">Sesuaikan Teks / Lirik</button>
+        </div>
+
         <div class="modal-body">
-          <!-- Input URL form -->
-          <div style="display: flex; gap: 8px;">
-            <input 
-              type="text" 
-              id="custom-youtube-url-input" 
-              class="typing-input-bar" 
-              style="text-align: left; padding: 0 16px; height: 44px; font-size: 0.9rem;" 
-              placeholder="Tempel link YouTube (e.g. https://www.youtube.com/watch?v=...)" 
-            />
-            <button type="button" id="load-custom-url-btn" class="btn-cyan">Muat</button>
+          <!-- TAB 1: Video YouTube -->
+          <div id="picker-tab-video" class="modal-tab-panel active">
+            <!-- Input URL form -->
+            <div style="display: flex; gap: 8px;">
+              <input 
+                type="text" 
+                id="custom-youtube-url-input" 
+                class="typing-input-bar" 
+                style="text-align: left; padding: 0 16px; height: 44px; font-size: 0.9rem;" 
+                placeholder="Tempel link YouTube (e.g. https://www.youtube.com/watch?v=...)" 
+              />
+              <button type="button" id="load-custom-url-btn" class="btn-cyan">Muat</button>
+            </div>
+
+            <div>
+              <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); margin-bottom: 8px; text-transform: uppercase;">
+                Pilihan Lagu Populer Ber-Lirik:
+              </div>
+              <div id="popular-songs-list" class="song-picker-list"></div>
+            </div>
           </div>
 
-          <div>
-            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); margin-bottom: 8px; text-transform: uppercase;">
-              Pilihan Lagu Populer Ber-Lirik:
+          <!-- TAB 2: Sesuaikan Teks / Lirik dengan Video YouTube -->
+          <div id="picker-tab-lyrics" class="modal-tab-panel">
+            <!-- Manual LRCLIB Search -->
+            <div>
+              <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); margin-bottom: 6px; text-transform: uppercase;">
+                Cari Versi Lirik yang Cocok dengan Video:
+              </div>
+              <div style="display: flex; gap: 8px;">
+                <input
+                  type="text"
+                  id="lyrics-manual-search-input"
+                  class="typing-input-bar"
+                  style="text-align: left; padding: 0 14px; height: 40px; font-size: 0.86rem;"
+                  placeholder="Ketik judul lagu &amp; artis..."
+                />
+                <button type="button" id="lyrics-manual-search-btn" class="btn-cyan" style="height: 40px;">Cari</button>
+              </div>
             </div>
-            <div id="popular-songs-list" class="song-picker-list"></div>
+
+            <!-- Candidates list -->
+            <div>
+              <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 6px;">
+                Pilih versi yang durasi &amp; waktunya paling sesuai dengan YouTube:
+              </div>
+              <div id="lyrics-candidates-list" class="song-picker-list" style="max-height: 150px;"></div>
+            </div>
+
+            <!-- Paste YouTube Transcript / LRC / SRT -->
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); text-transform: uppercase;">
+                Atau Tempel Transkrip YouTube / LRC / SRT:
+              </div>
+              <div style="font-size: 0.74rem; color: var(--text-muted);">
+                Mendukung copy-paste langsung dari "Tampilkan Transkrip" di YouTube (contoh: <code>0:12 Teks...</code>), format <code>[00:12.00]</code>, atau teks biasa.
+              </div>
+              <textarea
+                id="custom-transcript-textarea"
+                class="custom-textarea"
+                rows="4"
+                placeholder="0:13 Ang aking boyfriend, mahilig sa disco&#10;0:21 Lagi sa disco, lahat ng Sabado..."
+              ></textarea>
+              <div style="display: flex; justify-content: flex-end;">
+                <button type="button" id="apply-custom-transcript-btn" class="btn-cyan" style="height: 36px; font-size: 0.82rem;">Terapkan Teks ke Video</button>
+              </div>
+            </div>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button type="button" class="btn-ghost" data-close-modal>Batal</button>
+          <button type="button" class="btn-ghost" data-close-modal>Tutup</button>
         </div>
       </div>
     </div>
@@ -571,6 +643,145 @@
 
         <div class="modal-footer">
           <button type="button" class="btn-cyan" data-close-modal>Selesai</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: AKUN & LOGIN GOOGLE ================= -->
+    <div id="account-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="account-modal-title">
+      <div class="modal-card" style="max-width: 460px;">
+        <div class="modal-header">
+          <h2 id="account-modal-title" class="modal-title">Akun madtype</h2>
+          <button type="button" class="hud-btn" data-close-modal title="Tutup">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Signed Out View -->
+          <div id="account-signed-out-view" class="account-view">
+            <div class="account-hero">
+              <div class="account-hero-mark">madtype</div>
+              <p class="account-hero-desc">
+                Masuk dengan akun Google untuk menyimpan riwayat kecepatan ketik, lagu YouTube favorit, dan preferensi tampilan secara otomatis.
+              </p>
+            </div>
+
+            <ul class="account-benefits-list">
+              <li>Simpan riwayat WPM, akurasi, dan streak terbaik ke cloud</li>
+              <li>Tandai dan putar ulang lagu YouTube favorit kapan saja</li>
+              <li>Sinkronkan tema (Gray Matte / Cream Soft Matte) &amp; font latihan</li>
+            </ul>
+
+            <div id="auth-error-banner" class="auth-error-banner" style="display: none;"></div>
+
+            <button type="button" id="google-signin-btn" class="btn-google-auth">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+                <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.82-2.4 3.68v3.05h3.88c2.27-2.09 3.665-5.17 3.665-9.17z"/>
+                <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.11-6.72-4.96H1.29v3.14C3.26 21.3 7.31 24 12 24z"/>
+                <path fill="#FBBC05" d="M5.28 14.24c-.24-.72-.38-1.49-.38-2.24s.14-1.52.38-2.24V6.62H1.29C.47 8.24 0 10.06 0 12s.47 3.76 1.29 5.38l3.99-3.14z"/>
+                <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.31 0 3.26 2.7 1.29 6.62l3.99 3.14c.95-2.85 3.6-4.96 6.72-4.96z"/>
+              </svg>
+              <span id="google-signin-btn-text">Masuk dengan Google</span>
+            </button>
+          </div>
+
+          <!-- Signed In View -->
+          <div id="account-signed-in-view" class="account-view" style="display: none;">
+            <div class="account-profile-card">
+              <div id="account-profile-avatar" class="account-profile-avatar"></div>
+              <div class="account-profile-meta">
+                <div id="account-profile-name" class="account-profile-name">Pengguna</div>
+                <div id="account-profile-email" class="account-profile-email">user@gmail.com</div>
+                <span class="account-verified-badge">✓ Terhubung dengan Google</span>
+              </div>
+            </div>
+
+            <div class="results-stats-grid">
+              <div class="result-stat-box">
+                <div class="result-stat-label">Total Sesi</div>
+                <div id="account-total-sessions" class="result-stat-value tabular-nums">0</div>
+              </div>
+              <div class="result-stat-box">
+                <div class="result-stat-label">WPM Terbaik</div>
+                <div id="account-best-wpm" class="result-stat-value tabular-nums">0</div>
+              </div>
+              <div class="result-stat-box">
+                <div class="result-stat-label">Rata-rata Akurasi</div>
+                <div id="account-avg-acc" class="result-stat-value tabular-nums">0%</div>
+              </div>
+              <div class="result-stat-box">
+                <div class="result-stat-label">Lagu Favorit</div>
+                <div id="account-total-favs" class="result-stat-value tabular-nums">0</div>
+              </div>
+            </div>
+
+            <div style="display: flex; gap: 10px; justify-content: space-between; margin-top: 4px;">
+              <button type="button" id="account-open-history-btn" class="btn-ghost" style="flex: 1;">Riwayat Latihan</button>
+              <button type="button" id="google-signout-btn" class="btn-danger-outline">Keluar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: STATISTIK & RIWAYAT ================= -->
+    <div id="stats-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="stats-modal-title">
+      <div class="modal-card" style="max-width: 540px;">
+        <div class="modal-header">
+          <h2 id="stats-modal-title" class="modal-title">Statistik &amp; Riwayat Latihan</h2>
+          <button type="button" class="hud-btn" data-close-modal title="Tutup">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="results-stats-grid" style="margin-top: 0;">
+            <div class="result-stat-box">
+              <div class="result-stat-label">WPM Sesi Ini</div>
+              <div id="stats-live-wpm" class="result-stat-value tabular-nums">0</div>
+            </div>
+            <div class="result-stat-box">
+              <div class="result-stat-label">Akurasi Sesi Ini</div>
+              <div id="stats-live-acc" class="result-stat-value tabular-nums">100%</div>
+            </div>
+          </div>
+
+          <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); text-transform: uppercase;">
+            Riwayat Sesi Tersimpan:
+          </div>
+          <div id="history-sessions-list" class="song-picker-list" style="max-height: 240px;"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-cyan" data-close-modal>Tutup</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: LAGU FAVORIT ================= -->
+    <div id="favorites-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="favorites-modal-title">
+      <div class="modal-card" style="max-width: 520px;">
+        <div class="modal-header">
+          <h2 id="favorites-modal-title" class="modal-title">Lagu Favorit</h2>
+          <button type="button" class="hud-btn" data-close-modal title="Tutup">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <div class="current-song-fav-bar">
+            <div style="min-width: 0;">
+              <div id="fav-current-title" class="song-picker-item-title">Lagu Saat Ini</div>
+              <div id="fav-current-artist" class="song-picker-item-artist">-</div>
+            </div>
+            <button type="button" id="toggle-current-fav-btn" class="btn-cyan" style="height: 36px; font-size: 0.82rem; white-space: nowrap;">
+              ♡ Simpan Favorit
+            </button>
+          </div>
+
+          <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); text-transform: uppercase;">
+            Daftar Favorit Anda:
+          </div>
+          <div id="favorites-songs-list" class="song-picker-list" style="max-height: 240px;"></div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-cyan" data-close-modal>Tutup</button>
         </div>
       </div>
     </div>
