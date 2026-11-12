@@ -1,0 +1,6 @@
+{
+  "name": "VOCATYPE - Music Typing Practice",
+  "description": "Learn and practice typing lyrics in sync with YouTube music videos using real-time LRCLIB lyrics synchronization, WPM tracking, and customizable typing modes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>madtype - Music Typing Practice</title>
+    <meta name="description" content="Latih kecepatan dan akurasi mengetik lirik lagu dengan sinkronisasi musik YouTube secara real-time di madtype." />
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="madtype - Music Typing Practice" />
+    <meta property="og:description" content="Latih kecepatan dan akurasi mengetik lirik lagu dengan sinkronisasi musik YouTube secara real-time di madtype." />
+    <meta property="og:type" content="website" />
+    <meta name="twitter:card" content="summary_large_image" />
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="./assets/images/logo.svg" />
+
+    <!-- Google Fonts Preconnect & Practice Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Playpen+Sans:wght@400;500;600;700&family=Quicksand:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+    <!-- Stylesheet -->
+    <link rel="stylesheet" href="./assets/css/style.css" />
+  </head>
+  <body>
+    <div class="voca-layout">
+      
+      <!-- ================= HEADER ================= -->
+      <header class="voca-header">
+        <a href="./" class="voca-brand" title="madtype">
+          madtype
+        </a>
+
+        <nav class="voca-header-nav">
+          <!-- Theme Toggle (Gray Matte / Cream Soft Matte) -->
+          <button type="button" class="voca-nav-icon" id="theme-toggle-btn" title="Ganti Tema (Gray Matte / Cream Soft Matte)" aria-label="Ganti Tema">
+            <svg id="theme-icon-sun" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="5"/>
+              <line x1="12" y1="1" x2="12" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="23"/>
+              <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+              <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+              <line x1="1" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="12" x2="23" y2="12"/>
+              <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+              <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+            </svg>
+            <svg id="theme-icon-moon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display: none;">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+
+          <!-- Stats / Activity Icon -->
+          <button type="button" class="voca-nav-icon" id="header-stats-btn" title="Statistik & Riwayat" aria-label="Statistik">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+            </svg>
+          </button>
+          
+          <!-- Favorite Icon -->
+          <button type="button" class="voca-nav-icon" id="header-fav-btn" title="Lagu Favorit" aria-label="Favorit">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+            </svg>
+          </button>
+
+          <!-- Library / Browse Icon -->
+          <button type="button" class="voca-nav-icon" id="open-video-picker-icon-btn" title="Pilih Lagu" aria-label="Pilih Lagu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+              <polyline points="2 17 12 22 22 17"/>
+              <polyline points="2 12 12 17 22 12"/>
+            </svg>
+          </button>
+
+          <!-- User / Profile Icon -->
+          <button type="button" class="voca-nav-icon" id="open-settings-icon-btn" title="Pengaturan" aria-label="Pengaturan">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+          </button>
+        </nav>
+      </header>
+
+      <!-- ================= MAIN STAGE: LARGE VIDEO ================= -->
+      <main class="main-stage">
+        
+        <!-- Large Centered Video Player -->
+        <div class="video-theater-wrapper">
+          <!-- Waiting cue: appear when video pauses waiting for user to finish typing -->
+          <div id="waiting-badge" class="waiting-badge">
+            <span class="spinner" style="width: 14px; height: 14px; border-width: 1.5px;"></span>
+            <span>Ketik baris ini untuk melanjutkan musik...</span>
+          </div>
+
+          <div id="video-loading-screen" class="video-loading-screen">
+            <span class="spinner"></span>
+            <span>Memuat YouTube Video...</span>
+          </div>
+
+          <div id="youtube-player"></div>
+        </div>
+
+        <!-- ================= HUD MINI STRIP DIRECTLY BELOW VIDEO ================= -->
+        <!-- Shows BARIS, WPM, AKURASI, Timeline Scrub Bar, and Playback Controls -->
+        <div class="video-hud-strip">
+          
+          <!-- Left: Baris, WPM, Akurasi -->
+          <div class="hud-stats-left">
+            <div class="hud-stat-box">
+              <span class="hud-stat-label">BARIS</span>
+              <span id="hud-baris-val" class="hud-stat-val cyan tabular-nums">1/1</span>
+            </div>
+            <div class="hud-stat-box">
+              <span class="hud-stat-label">WPM</span>
+              <span id="hud-wpm-val" class="hud-stat-val tabular-nums">0</span>
+            </div>
+            <div class="hud-stat-box">
+              <span class="hud-stat-label">AKURASI</span>
+              <span id="hud-acc-val" class="hud-stat-val tabular-nums">100%</span>
+            </div>
+          </div>
+
+          <!-- Center: Timeline Range Scrub Bar -->
+          <div class="hud-timeline-center">
+            <div class="timeline-bar-wrapper">
+              <input type="range" id="timeline-slider" class="timeline-range" min="0" max="100" value="0" step="0.1" aria-label="Video timeline" />
+            </div>
+            <span id="hud-time-display" class="hud-time-text tabular-nums">00:00 / 02:56</span>
+          </div>
+
+          <!-- Right: Navigation buttons (< ▷ ↺ > ⛶) -->
+          <div class="hud-nav-controls">
+            <button type="button" id="hud-prev-btn" class="hud-btn" title="Baris Sebelumnya">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
+            <button type="button" id="hud-play-btn" class="hud-btn active-play" title="Play / Pause">
+              <svg id="hud-play-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+                <polygon points="5 3 19 12 5 21 5 3"/>
+              </svg>
+            </button>
+            <button type="button" id="hud-restart-btn" class="hud-btn" title="Ulangi Lagu">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="1 4 1 10 7 10"/>
+                <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+              </svg>
+            </button>
+            <button type="button" id="hud-next-btn" class="hud-btn" title="Baris Selanjutnya">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 18 15 12 9 6"/>
+              </svg>
+            </button>
+            <button type="button" id="hud-theater-btn" class="hud-btn" title="Mode Layar Lebar">
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="3" width="20" height="14" rx="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </button>
+          </div>
+
+        </div>
+
+        <!-- ================= LYRICS & TYPING ARENA ================= -->
+        <!-- Center-aligned, Large text right below video -->
+        <section class="typing-arena-section">
+          
+          <!-- Big Active Lyric Text Line -->
+          <div id="active-lyric-display" class="active-lyric-display">
+            <span class="char untyped">Memuat lirik lagu...</span>
+          </div>
+
+          <!-- Play/Pause center overlay icon -->
+          <button type="button" id="arena-play-toggle" class="arena-play-toggle-btn" title="Klik untuk Play / Pause">
+            <svg id="arena-play-icon" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+          </button>
+
+          <!-- Translation / Subtitle text line -->
+          <div id="lyric-translation-text" class="lyric-translation-text">
+            <span>Dengarkan musik dan ketik lirik di bawah ini</span>
+          </div>
+
+          <!-- Typing Input Bar (Tip: Esc to pause...) -->
+          <div class="typing-input-container">
+            <input 
+              type="text" 
+              id="typing-input-bar" 
+              class="typing-input-bar" 
+              placeholder="Tip: Esc to pause..." 
+              autocomplete="off" 
+              spellcheck="false" 
+            />
+            <div class="line-progress-mini">
+              <div id="line-progress-mini-fill" class="line-progress-mini-fill"></div>
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+
+      <!-- ================= BOTTOM FLOATING TOOLBAR WRAPPER ================= -->
+      <div class="bottom-floating-bar-wrapper">
+
+        <!-- FLOATING POPOVERS CONTAINER (Anchored above toolbar) -->
+        <div class="voca-popovers-container">
+          
+          <!-- Popover 1: Words to Type (%) [Screenshot 3] -->
+          <div id="popover-words" class="voca-popover" role="dialog" aria-label="Words to Type">
+            <div class="popover-header-row">
+              <h3 class="popover-title">Words to Type</h3>
+              <span class="popover-info-icon" title="Pilih persentase kata yang harus diketik">ⓘ</span>
+            </div>
+            <div class="popover-options-list" id="words-to-type-options">
+              <button type="button" class="popover-option-btn selected" data-words-mode="all">
+                <span>All words (100%)</span>
+                <span class="option-check">✓</span>
+              </button>
+              <button type="button" class="popover-option-btn" data-words-mode="moderate">
+                <span>Moderate (~55%)</span>
+                <span class="option-check"></span>
+              </button>
+              <button type="button" class="popover-option-btn" data-words-mode="light">
+                <span>Light (~35%)</span>
+                <span class="option-check"></span>
+              </button>
+              <button type="button" class="popover-option-btn" data-words-mode="first_letters">
+                <span>First letters only</span>
+                <span class="option-check"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Popover 2: Practice Font (Aa) [Screenshot 1] -->
+          <div id="popover-font" class="voca-popover" role="dialog" aria-label="Practice Font">
+            <h3 class="popover-title">Practice Font</h3>
+            <div class="popover-options-list" id="font-options-list">
+              <button type="button" class="popover-option-btn selected" data-font="Be Vietnam Pro">
+                <span style="font-family: 'Be Vietnam Pro', sans-serif;">Be Vietnam Pro</span>
+                <span class="option-check">✓</span>
+              </button>
+              <button type="button" class="popover-option-btn" data-font="Roboto Mono">
+                <span style="font-family: 'Roboto Mono', monospace;">Roboto Mono</span>
+                <span class="option-check"></span>
+              </button>
+              <button type="button" class="popover-option-btn" data-font="Quicksand">
+                <span style="font-family: 'Quicksand', sans-serif;">Quicksand</span>
+                <span class="option-check"></span>
+              </button>
+              <button type="button" class="popover-option-btn" data-font="Playpen Sans">
+                <span style="font-family: 'Playpen Sans', cursive, sans-serif;">Playpen Sans</span>
+                <span class="option-check"></span>
+              </button>
+            </div>
+            <div class="popover-divider"></div>
+            <div class="popover-subtext">
+              Enter a font name or link from Google Fonts<br/>
+              <a href="https://fonts.google.com" target="_blank" rel="noreferrer" class="popover-link">Google Fonts</a>
+            </div>
+            <div class="popover-input-group">
+              <input type="text" id="custom-font-input" class="popover-text-input" placeholder="Roboto Mono" />
+              <button type="button" id="apply-custom-font-btn" class="popover-icon-action-btn" title="Terapkan Font">✓</button>
+            </div>
+          </div>
+
+          <!-- Popover 3: Customizations (⊶) [Screenshot 2] -->
+          <div id="popover-customizations" class="voca-popover" role="dialog" aria-label="Customizations">
+            <h3 class="popover-title">Customizations</h3>
+            <div class="custom-fields-stack">
+              <div class="custom-field">
+                <label for="custom-auto-replay" class="custom-label">Auto Replay</label>
+                <select id="custom-auto-replay" class="custom-select">
+                  <option value="off">Off</option>
+                  <option value="5">Every 5s</option>
+                  <option value="10" selected>Every 10s</option>
+                  <option value="15">Every 15s</option>
+                </select>
+              </div>
+              <div class="custom-field">
+                <label for="custom-key-sound" class="custom-label">Key Sound</label>
+                <select id="custom-key-sound" class="custom-select">
+                  <option value="off">Off</option>
+                  <option value="quiet">Quiet</option>
+                  <option value="medium" selected>Medium</option>
+                  <option value="loud">Loud</option>
+                </select>
+              </div>
+              <div class="custom-field">
+                <label for="custom-error-sound" class="custom-label">Error Sound</label>
+                <select id="custom-error-sound" class="custom-select">
+                  <option value="off">Off</option>
+                  <option value="error" selected>Error</option>
+                  <option value="beep">Beep</option>
+                  <option value="thud">Thud</option>
+                </select>
+              </div>
+              <div class="custom-field">
+                <label for="custom-theme-mode" class="custom-label">Theme / Tema</label>
+                <select id="custom-theme-mode" class="custom-select">
+                  <option value="dark" selected>Gray Matte (Mode Gelap)</option>
+                  <option value="light">Cream Soft Matte (Mode Terang)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <!-- Popover 4: Mode Ketik (⌨ Type) -->
+          <div id="popover-mode" class="voca-popover" role="dialog" aria-label="Mode Ketik">
+            <h3 class="popover-title">Mode Ketik</h3>
+            <div class="popover-options-list" id="mode-options-list">
+              <button type="button" class="popover-option-btn selected" data-type-mode="wait">
+                <span>Tunggu Selesai (Auto-pause)</span>
+                <span class="option-check">✓</span>
+              </button>
+              <button type="button" class="popover-option-btn" data-type-mode="continuous">
+                <span>Bebas (Continuous)</span>
+                <span class="option-check"></span>
+              </button>
+              <button type="button" class="popover-option-btn" data-type-mode="line">
+                <span>Mode Baris (Line Mode)</span>
+                <span class="option-check"></span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Popover 5: Subtitle / Terjemahan (文A) -->
+          <div id="popover-subtitles" class="voca-popover" role="dialog" aria-label="Terjemahan Lirik">
+            <h3 class="popover-title">Terjemahan Lirik</h3>
+            <div class="popover-options-list" id="subtitle-options-list">
+              <button type="button" class="popover-option-btn selected" data-sub-mode="show">
+                <span>Tampilkan Terjemahan</span>
+                <span class="option-check">✓</span>
+              </button>
+              <button type="button" class="popover-option-btn" data-sub-mode="hide">
+                <span>Sembunyikan Terjemahan</span>
+                <span class="option-check"></span>
+              </button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- The Floating Pill Toolbar -->
+        <aside class="bottom-floating-bar">
+          
+          <!-- Restart Icon Button -->
+          <button type="button" id="toolbar-restart-btn" class="toolbar-pill-btn toolbar-icon-only" title="Ulangi dari awal">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="1 4 1 10 7 10"/>
+              <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>
+            </svg>
+          </button>
+
+          <!-- Video Dropdown Button -->
+          <button type="button" id="toolbar-pilih-video-btn" class="toolbar-pill-btn" title="Pilih atau cari lagu">
+            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>Video</span>
+            <span class="pill-caret">▾</span>
+          </button>
+
+          <!-- Type Mode Dropdown Button -->
+          <button type="button" id="toolbar-mode-btn" class="toolbar-pill-btn" title="Mode latihan ketik">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="16" rx="2"/>
+              <path d="M6 8h.001M10 8h.001M14 8h.001M18 8h.001M8 12h.001M12 12h.001M16 12h.001M7 16h10"/>
+            </svg>
+            <span>Type</span>
+            <span class="pill-caret">▾</span>
+          </button>
+
+          <!-- Subtitle Dropdown Button (文A) -->
+          <button type="button" id="toolbar-subtitle-btn" class="toolbar-pill-btn" title="Terjemahan lirik">
+            <span style="font-weight: 700; font-size: 0.85rem;">文A</span>
+            <span class="pill-caret">▾</span>
+          </button>
+
+          <!-- Words to Type Dropdown Button (%) [Screenshot 3] -->
+          <button type="button" id="toolbar-words-btn" class="toolbar-pill-btn" title="Words to Type">
+            <span style="font-weight: 700; font-size: 0.88rem;">%</span>
+            <span class="pill-caret">▾</span>
+          </button>
+
+          <!-- Practice Font Dropdown Button (Aa) [Screenshot 1] -->
+          <button type="button" id="toolbar-font-btn" class="toolbar-pill-btn" title="Practice Font">
+            <span style="font-weight: 700; font-size: 0.95rem;">Aa</span>
+            <span class="pill-caret">▾</span>
+          </button>
+
+          <!-- Customizations Button (⊶) [Screenshot 2] -->
+          <button type="button" id="toolbar-custom-btn" class="toolbar-pill-btn toolbar-icon-only" title="Customizations">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14"/>
+              <line x1="4" y1="10" x2="4" y2="3"/>
+              <line x1="12" y1="21" x2="12" y2="12"/>
+              <line x1="12" y1="8" x2="12" y2="3"/>
+              <line x1="20" y1="21" x2="20" y2="16"/>
+              <line x1="20" y1="12" x2="20" y2="3"/>
+              <line x1="1" y1="14" x2="7" y2="14"/>
+              <line x1="9" y1="8" x2="15" y2="8"/>
+              <line x1="17" y1="16" x2="23" y2="16"/>
+            </svg>
+          </button>
+
+          <!-- Collapse Toolbar Button (⌄) -->
+          <button type="button" id="toolbar-collapse-btn" class="toolbar-pill-btn toolbar-icon-only" title="Tutup / Buka Toolbar">
+            <svg id="collapse-icon" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
+
+        </aside>
+      </div>
+
+      <!-- ================= FOOTER ================= -->
+      <footer class="voca-footer">
+        <a href="#about" id="footer-about-link">Tentang</a>
+        <span>·</span>
+        <a href="#terms">Ketentuan Layanan</a>
+        <span>·</span>
+        <a href="#privacy">Kebijakan Privasi</a>
+        <span>·</span>
+        <span>madtype</span>
+      </footer>
+
+    </div>
+
+    <!-- ================= MODAL: PILIH VIDEO / LAGU ================= -->
+    <div id="video-picker-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="picker-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 id="picker-title" class="modal-title">Pilih Video & Lagu</h2>
+          <button type="button" class="hud-btn" data-close-modal title="Tutup">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Input URL form -->
+          <div style="display: flex; gap: 8px;">
+            <input 
+              type="text" 
+              id="custom-youtube-url-input" 
+              class="typing-input-bar" 
+              style="text-align: left; padding: 0 16px; height: 44px; font-size: 0.9rem;" 
+              placeholder="Tempel link YouTube (e.g. https://www.youtube.com/watch?v=...)" 
+            />
+            <button type="button" id="load-custom-url-btn" class="btn-cyan">Muat</button>
+          </div>
+
+          <div>
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--text-subtle); margin-bottom: 8px; text-transform: uppercase;">
+              Pilihan Lagu Populer Ber-Lirik:
+            </div>
+            <div id="popular-songs-list" class="song-picker-list"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-ghost" data-close-modal>Batal</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: HASIL SELESAI LAGU (RESULTS SCREEN) ================= -->
+    <!-- Appears automatically when song is completed! -->
+    <div id="results-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="results-title">
+      <div class="modal-card" style="text-align: center;">
+        <div class="modal-header">
+          <h2 id="results-title" class="modal-title" style="width: 100%; text-align: center;">🎉 Lagu Selesai!</h2>
+        </div>
+
+        <div class="modal-body">
+          <div class="results-trophy-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/>
+              <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/>
+              <path d="M4 22h16"/>
+              <path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/>
+              <path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/>
+              <path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/>
+            </svg>
+          </div>
+
+          <h3 id="result-song-title" style="font-size: 1.2rem; font-weight: 700; color: var(--text-main);">Nama Lagu</h3>
+          <p id="result-song-artist" style="font-size: 0.88rem; color: var(--text-muted);">Nama Artis</p>
+
+          <div class="results-stats-grid">
+            <div class="result-stat-box">
+              <div class="result-stat-label">Kecepatan (WPM)</div>
+              <div id="result-final-wpm" class="result-stat-value tabular-nums">0</div>
+            </div>
+            <div class="result-stat-box">
+              <div class="result-stat-label">Akurasi</div>
+              <div id="result-final-acc" class="result-stat-value tabular-nums">100%</div>
+            </div>
+            <div class="result-stat-box">
+              <div class="result-stat-label">Karakter Benar</div>
+              <div id="result-final-correct" class="result-stat-value tabular-nums" style="color: var(--color-success);">0</div>
+            </div>
+            <div class="result-stat-box">
+              <div class="result-stat-label">Streak Terbaik</div>
+              <div id="result-final-streak" class="result-stat-value tabular-nums">0</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer" style="justify-content: center; gap: 14px;">
+          <button type="button" id="result-pick-another-btn" class="btn-ghost">Pilih Lagu Lain</button>
+          <button type="button" id="result-play-again-btn" class="btn-cyan">Main Lagi ↺</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= MODAL: PENGATURAN & SINKRONISASI ================= -->
+    <div id="settings-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 id="settings-title" class="modal-title">Pengaturan & Sinkronisasi</h2>
+          <button type="button" class="hud-btn" data-close-modal title="Tutup">✕</button>
+        </div>
+
+        <div class="modal-body">
+          <!-- Theme Setting -->
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 600; color: var(--text-main);">Mode Tampilan</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted);">Gray Matte (Gelap) atau Cream Soft Matte (Terang)</div>
+            </div>
+            <select id="setting-theme-select" class="custom-select" style="width: auto; min-width: 180px;">
+              <option value="dark">Gray Matte</option>
+              <option value="light">Cream Soft Matte</option>
+            </select>
+          </div>
+
+          <!-- Pause while typing setting -->
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 600; color: var(--text-main);">Tunggu Ketikan Selesai</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted);">Musik otomatis pause jika lirik belum selesai diketik</div>
+            </div>
+            <input type="checkbox" id="setting-wait-for-typing" checked style="width: 20px; height: 20px; accent-color: var(--accent-matte);" />
+          </div>
+
+          <!-- Sound Effects -->
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div>
+              <div style="font-weight: 600; color: var(--text-main);">Suara Keyboard (SFX)</div>
+              <div style="font-size: 0.78rem; color: var(--text-muted);">Efek suara klik ketukan dan kesalahan</div>
+            </div>
+            <input type="checkbox" id="setting-sfx-toggle" checked style="width: 20px; height: 20px; accent-color: var(--accent-matte);" />
+          </div>
+
+          <!-- Offset Adjuster -->
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            <div style="font-weight: 600; color: var(--text-main);">Sinkronisasi Offset Waktu</div>
+            <div style="font-size: 0.78rem; color: var(--text-muted);">Sesuaikan jika lirik terlalu cepat atau lambat dari lagu</div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button type="button" id="modal-offset-minus" class="hud-btn" style="width: 44px; height: 36px; font-weight: 700;">-0.5s</button>
+              <span id="modal-offset-val" class="hud-stat-val tabular-nums" style="min-width: 60px; text-align: center;">0.0s</span>
+              <button type="button" id="modal-offset-plus" class="hud-btn" style="width: 44px; height: 36px; font-weight: 700;">+0.5s</button>
+              <button type="button" id="modal-offset-reset" class="btn-ghost" style="height: 36px; padding: 0 12px; font-size: 0.8rem;">Reset</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn-cyan" data-close-modal>Selesai</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Main Controller Script -->
+    <script type="module" src="./assets/js/app.js"></script>
+  </body>
+</html>
