@@ -22,7 +22,7 @@ import {
   deleteDoc,
   collection,
   query,
-  orderBy,
+  where,
   limit,
   onSnapshot,
   serverTimestamp,
@@ -115,6 +115,7 @@ export class AuthManager {
 
     this.unsubSessions = null;
     this.unsubFavorites = null;
+    this.userDocsPromise = null;
 
     this.provider = new GoogleAuthProvider();
     this.provider.setCustomParameters({ prompt: 'select_account' });
@@ -131,12 +132,14 @@ export class AuthManager {
       if (this.user) {
         this.onAuthChanged(this.user);
         try {
-          await this.ensureUserDocuments(this.user);
+          this.userDocsPromise = this.ensureUserDocuments(this.user);
+          await this.userDocsPromise;
           this.attachUserListeners(this.user.uid);
         } catch (err) {
           console.error('Failed to initialize user cloud data:', err);
         }
       } else {
+        this.userDocsPromise = null;
         this.profile = null;
         this.sessions = [];
         this.favorites = [];
@@ -273,17 +276,26 @@ export class AuthManager {
     if (!this.authReady || !this.user) return;
     const uid = sanitizeId(rawUid, 128);
 
-    // Sessions listener
+    const getMillis = (ts) => {
+      if (!ts) return 0;
+      if (typeof ts.toMillis === 'function') return ts.toMillis();
+      if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+      return 0;
+    };
+
+    // Sessions listener (explicitly filters uid == uid to satisfy Firestore list rules without composite index)
     const sessionsPath = `users/${uid}/sessions`;
     const sessionsQuery = query(
       collection(db, 'users', uid, 'sessions'),
-      orderBy('createdAt', 'desc'),
-      limit(25)
+      where('uid', '==', uid),
+      limit(50)
     );
     this.unsubSessions = onSnapshot(
       sessionsQuery,
       (snapshot) => {
-        this.sessions = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        this.sessions = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
         this.onSessionsUpdated(this.sessions);
       },
       (err) => {
@@ -292,17 +304,19 @@ export class AuthManager {
       }
     );
 
-    // Favorites listener
+    // Favorites listener (explicitly filters uid == uid to satisfy Firestore list rules without composite index)
     const favoritesPath = `users/${uid}/favorites`;
     const favoritesQuery = query(
       collection(db, 'users', uid, 'favorites'),
-      orderBy('createdAt', 'desc'),
-      limit(50)
+      where('uid', '==', uid),
+      limit(100)
     );
     this.unsubFavorites = onSnapshot(
       favoritesQuery,
       (snapshot) => {
-        this.favorites = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        this.favorites = snapshot.docs
+          .map((d) => ({ id: d.id, ...d.data() }))
+          .sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
         this.onFavoritesUpdated(this.favorites);
       },
       (err) => {
@@ -314,6 +328,9 @@ export class AuthManager {
 
   async savePreferences(prefs = {}) {
     if (!this.authReady || !this.user) return;
+    if (this.userDocsPromise) {
+      await this.userDocsPromise.catch(() => {});
+    }
     const uid = sanitizeId(this.user.uid, 128);
     const userPath = `users/${uid}`;
 
@@ -339,6 +356,9 @@ export class AuthManager {
 
   async savePracticeSession(sessionData) {
     if (!this.authReady || !this.user) return false;
+    if (this.userDocsPromise) {
+      await this.userDocsPromise.catch(() => {});
+    }
     const uid = sanitizeId(this.user.uid, 128);
     const sessionId = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const sessionPath = `users/${uid}/sessions/${sessionId}`;
@@ -378,6 +398,9 @@ export class AuthManager {
     if (!this.authReady || !this.user) {
       return { requiresAuth: true };
     }
+    if (this.userDocsPromise) {
+      await this.userDocsPromise.catch(() => {});
+    }
     const uid = sanitizeId(this.user.uid, 128);
     const videoId = sanitizeId(song?.videoId, 32);
     if (!videoId || videoId === 'unknown') return { success: false };
@@ -385,7 +408,17 @@ export class AuthManager {
     const favPath = `users/${uid}/favorites/${videoId}`;
     const favRef = doc(db, 'users', uid, 'favorites', videoId);
 
-    if (this.isFavorite(videoId)) {
+    let existsOnServer = this.isFavorite(videoId);
+    if (!existsOnServer) {
+      try {
+        const snap = await getDoc(favRef);
+        existsOnServer = snap.exists();
+      } catch (err) {
+        handleFirestoreError(err, OperationType.GET, favPath);
+      }
+    }
+
+    if (existsOnServer) {
       try {
         await deleteDoc(favRef);
         return { success: true, favorited: false };
