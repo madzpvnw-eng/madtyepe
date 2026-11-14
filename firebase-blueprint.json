@@ -225,6 +225,69 @@
         }
       },
       "required": ["uid", "videoId", "title", "artist", "duration", "createdAt"]
+    },
+    "LoginLog": {
+      "title": "LoginLog",
+      "description": "Audit record tracking each authenticated Google account that has signed into madtype.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the signed-in user."
+        },
+        "displayName": {
+          "type": "string",
+          "maxLength": 120,
+          "description": "Display name of the Google account."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 254,
+          "description": "Verified email address of the Google account."
+        },
+        "emailVerified": {
+          "type": "boolean",
+          "description": "Whether the Google email is verified."
+        },
+        "photoURL": {
+          "type": "string",
+          "maxLength": 500,
+          "description": "Avatar URL of the Google account."
+        },
+        "providerId": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Auth provider identifier (e.g. google.com)."
+        },
+        "loginCount": {
+          "type": "number",
+          "description": "Total number of recorded sign-in sessions."
+        },
+        "firstLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the user's first recorded login."
+        },
+        "lastLoginAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of the user's most recent login."
+        }
+      },
+      "required": [
+        "uid",
+        "displayName",
+        "email",
+        "emailVerified",
+        "photoURL",
+        "providerId",
+        "loginCount",
+        "firstLoginAt",
+        "lastLoginAt"
+      ]
     }
   },
   "firestore": {
@@ -251,6 +314,12 @@
         "$ref": "#/entities/FavoriteSong"
       },
       "description": "User's favorite YouTube songs for quick replay."
+    },
+    "/login_logs/{userId}": {
+      "schema": {
+        "$ref": "#/entities/LoginLog"
+      },
+      "description": "Admin-readable audit log of all Google accounts that have ever signed in."
     }
   }
 }

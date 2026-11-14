@@ -29,7 +29,12 @@ export class TypingEngine {
     this.lineProgressFill = null;
     this.hiddenInput = null;
 
+    // Input & IME state (desktop keydown + tablet/mobile virtual keyboards)
     this.isListening = false;
+    this.isComposing = false;
+    this._isSyncingInput = false;
+    this._lastHandledKeydown = null;
+    this._boundInputElement = null;
     this.bindEvents();
   }
 
@@ -39,6 +44,7 @@ export class TypingEngine {
     this.nextLineContainer = elements.nextLineContainer;
     this.lineProgressFill = elements.lineProgressFill;
     this.hiddenInput = elements.hiddenInput;
+    this.bindInputEvents();
   }
 
   setLyrics(lyrics, emptyMessage = '') {
@@ -73,6 +79,8 @@ export class TypingEngine {
     this.currentLineIndex = index;
     this.currentCharIndex = 0;
     this.isLineCompleted = false;
+    this.isComposing = false;
+    this._lastHandledKeydown = null;
 
     const lineText = this.lyrics[index].text;
     this.typedStatuses = new Array(lineText.length).fill(null);
@@ -123,8 +131,12 @@ export class TypingEngine {
     if (this.isListening) return;
 
     window.addEventListener('keydown', (e) => {
-      // Don't intercept typing if any modal is currently open
+      // Don't intercept typing if any modal or hidden admin page is currently open
       if (document.querySelector('.modal-overlay.open')) {
+        return;
+      }
+      const adminPage = document.getElementById('admin-hidden-page');
+      if (adminPage && adminPage.style.display !== 'none') {
         return;
       }
 
@@ -140,13 +152,54 @@ export class TypingEngine {
     this.isListening = true;
   }
 
+  bindInputEvents() {
+    if (!this.hiddenInput || this._boundInputElement === this.hiddenInput) return;
+    this._boundInputElement = this.hiddenInput;
+
+    this.hiddenInput.addEventListener('compositionstart', () => {
+      this.isComposing = true;
+    });
+
+    this.hiddenInput.addEventListener('compositionend', () => {
+      this.isComposing = false;
+      this.handleInputEvent({ inputType: 'compositionEnd', isComposing: false });
+    });
+
+    this.hiddenInput.addEventListener('beforeinput', (e) => {
+      if (document.querySelector('.modal-overlay.open')) return;
+      if (e.inputType === 'insertLineBreak' || e.inputType === 'insertParagraph') {
+        e.preventDefault();
+        if (this.isLineCompleted) {
+          this.goToNextLine();
+          this.onAdvanceRequest(this.currentLineIndex);
+        }
+      }
+    });
+
+    this.hiddenInput.addEventListener('input', (e) => {
+      if (this._isSyncingInput) return;
+      if (document.querySelector('.modal-overlay.open')) {
+        this.syncInputBarDisplay({ force: true });
+        return;
+      }
+      this.handleInputEvent(e);
+    });
+  }
+
   handleKeyDown(e) {
     if (!this.lyrics || this.lyrics.length === 0) return;
     if (this.currentLineIndex >= this.lyrics.length) return;
 
-    const currentLine = this.lyrics[this.currentLineIndex];
-    if (!currentLine) return;
-    const lineText = currentLine.text;
+    // Allow mobile/tablet virtual keyboards and IME composition to emit native `input` events
+    if (
+      e.isComposing ||
+      e.keyCode === 229 ||
+      e.key === 'Unidentified' ||
+      e.key === 'Process' ||
+      e.key === 'Dead'
+    ) {
+      return;
+    }
 
     // Handle Enter to skip to next line if current line is already completed
     if (e.key === 'Enter') {
@@ -156,23 +209,17 @@ export class TypingEngine {
         this.onAdvanceRequest(this.currentLineIndex);
         return;
       }
+      if (e.target === this.hiddenInput) {
+        e.preventDefault();
+      }
+      return;
     }
 
     // Handle Backspace
     if (e.key === 'Backspace') {
       e.preventDefault();
-      if (this.currentCharIndex > 0) {
-        this.currentCharIndex--;
-        this.typedStatuses[this.currentCharIndex] = null;
-        this.typedBuffer[this.currentCharIndex] = '';
-        if (this.wordsToType === 'first_letters') {
-          while (this.currentCharIndex > 0 && this.typedStatuses[this.currentCharIndex - 1] === true) {
-            this.currentCharIndex--;
-            this.typedStatuses[this.currentCharIndex] = null;
-            this.typedBuffer[this.currentCharIndex] = '';
-          }
-        }
-        this.isLineCompleted = false;
+      this._lastHandledKeydown = { key: 'Backspace', time: performance.now() };
+      if (this.handleBackspace()) {
         this.render();
       }
       return;
@@ -185,15 +232,39 @@ export class TypingEngine {
 
     // Prevent default on all printable keys (crucial for Spacebar so page does not scroll)
     e.preventDefault();
+    this._lastHandledKeydown = { key: e.key, time: performance.now() };
+    this.processTypedChar(e.key);
+  }
 
-    // Stop if line already finished
+  handleBackspace() {
+    if (this.currentCharIndex <= 0) return false;
+    this.currentCharIndex--;
+    this.typedStatuses[this.currentCharIndex] = null;
+    this.typedBuffer[this.currentCharIndex] = '';
+    if (this.wordsToType === 'first_letters') {
+      while (this.currentCharIndex > 0 && this.typedStatuses[this.currentCharIndex - 1] === true) {
+        this.currentCharIndex--;
+        this.typedStatuses[this.currentCharIndex] = null;
+        this.typedBuffer[this.currentCharIndex] = '';
+      }
+    }
+    this.isLineCompleted = false;
+    return true;
+  }
+
+  processTypedChar(typedChar, { skipRender = false } = {}) {
+    if (!this.lyrics || this.lyrics.length === 0) return { advanced: false, completed: false };
+    if (this.currentLineIndex >= this.lyrics.length) return { advanced: false, completed: false };
+
+    const currentLine = this.lyrics[this.currentLineIndex];
+    if (!currentLine) return { advanced: false, completed: false };
+    const lineText = currentLine.text;
+
     if (this.currentCharIndex >= lineText.length) {
-      return;
+      return { advanced: false, completed: this.isLineCompleted };
     }
 
-    const typedChar = e.key;
     const expectedChar = lineText[this.currentCharIndex];
-
     const isMatch = this.checkCharMatch(typedChar, expectedChar);
 
     this.typedStatuses[this.currentCharIndex] = isMatch;
@@ -222,13 +293,80 @@ export class TypingEngine {
       }
     }
 
-    // Check if line completed
     if (this.currentCharIndex >= lineText.length) {
       this.isLineCompleted = true;
       this.render();
       this.onLineCompleted(this.currentLineIndex);
-    } else {
+      return { advanced: true, completed: true };
+    }
+
+    if (!skipRender) {
       this.render();
+    }
+    return { advanced: true, completed: false };
+  }
+
+  handleInputEvent(e) {
+    if (!this.hiddenInput) return;
+
+    if (!this.lyrics || this.lyrics.length === 0 || this.currentLineIndex >= this.lyrics.length) {
+      this.syncInputBarDisplay({ force: true });
+      return;
+    }
+
+    // Deduplicate only if a non-IME keydown event already processed this exact keystroke and the browser still fired `input`
+    if (
+      this._lastHandledKeydown &&
+      performance.now() - this._lastHandledKeydown.time < 20 &&
+      ((e?.inputType === 'insertText' && e.data === this._lastHandledKeydown.key) ||
+       (e?.inputType === 'deleteContentBackward' && this._lastHandledKeydown.key === 'Backspace'))
+    ) {
+      this._lastHandledKeydown = null;
+      this.syncInputBarDisplay({ force: true });
+      return;
+    }
+
+    const expected = this.typedBuffer.slice(0, this.currentCharIndex).join('');
+    const rawValue = this.hiddenInput.value || '';
+
+    let prefixLen = 0;
+    const minLen = Math.min(expected.length, rawValue.length);
+    while (prefixLen < minLen && expected[prefixLen] === rawValue[prefixLen]) {
+      prefixLen++;
+    }
+
+    const deleteCount = expected.length - prefixLen;
+    const addedText = rawValue.slice(prefixLen).replace(/[\r\n]/g, '');
+
+    if (deleteCount === 0 && addedText.length === 0) {
+      if (!this.isComposing) {
+        this.syncInputBarDisplay({ force: true });
+      }
+      return;
+    }
+
+    const startLineIndex = this.currentLineIndex;
+    let changed = false;
+
+    for (let i = 0; i < deleteCount; i++) {
+      if (this.handleBackspace()) changed = true;
+    }
+
+    for (const ch of addedText) {
+      if (this.currentLineIndex !== startLineIndex || this.isLineCompleted) {
+        break;
+      }
+      const res = this.processTypedChar(ch, { skipRender: true });
+      if (res.advanced) changed = true;
+      if (res.completed || this.currentLineIndex !== startLineIndex) {
+        return;
+      }
+    }
+
+    if (changed) {
+      this.render();
+    } else if (!this.isComposing) {
+      this.syncInputBarDisplay({ force: true });
     }
   }
 
@@ -282,6 +420,28 @@ export class TypingEngine {
 
   restart() {
     this.initLine(0);
+  }
+
+  syncInputBarDisplay({ force = false } = {}) {
+    if (!this.hiddenInput) return;
+    const displayValue = this.typedBuffer.slice(0, this.currentCharIndex).join('');
+    this._isSyncingInput = true;
+    try {
+      if (this.hiddenInput.value !== displayValue) {
+        this.hiddenInput.value = displayValue;
+      }
+      if (document.activeElement === this.hiddenInput) {
+        if (!this.isComposing || force) {
+          const len = this.hiddenInput.value.length;
+          try {
+            this.hiddenInput.setSelectionRange(len, len);
+          } catch (err) {}
+        }
+        this.hiddenInput.scrollLeft = this.hiddenInput.scrollWidth;
+      }
+    } finally {
+      this._isSyncingInput = false;
+    }
   }
 
   render() {
@@ -349,19 +509,7 @@ export class TypingEngine {
     }
 
     // 2b. Sync visible typed characters inside the typing input bar
-    if (this.hiddenInput) {
-      const displayValue = this.typedBuffer.slice(0, this.currentCharIndex).join('');
-      if (this.hiddenInput.value !== displayValue) {
-        this.hiddenInput.value = displayValue;
-      }
-      if (document.activeElement === this.hiddenInput) {
-        const len = displayValue.length;
-        try {
-          this.hiddenInput.setSelectionRange(len, len);
-        } catch (err) {}
-        this.hiddenInput.scrollLeft = this.hiddenInput.scrollWidth;
-      }
-    }
+    this.syncInputBarDisplay();
 
     // 3. Render Previous Line Preview (up to 2 previous lines)
     if (this.prevLineContainer) {

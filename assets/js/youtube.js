@@ -12,6 +12,7 @@ export class YouTubeController {
     this.onError = options.onError || (() => {});
     this.onReady = options.onReady || (() => {});
     this.onDurationReady = options.onDurationReady || (() => {});
+    this.onCaptionTracksReady = options.onCaptionTracksReady || (() => {});
 
     this.player = null;
     this.isApiReady = false;
@@ -20,6 +21,7 @@ export class YouTubeController {
     this.duration = 0;
     this.isReady = false;
     this._notifiedDurationForVideo = null;
+    this._notifiedCaptionsForVideo = null;
 
     this.loadIFrameApi();
   }
@@ -98,6 +100,7 @@ export class YouTubeController {
     this.currentVideoId = videoId;
     this.duration = 0;
     this._notifiedDurationForVideo = null;
+    this._notifiedCaptionsForVideo = null;
     this.stopTimeTicker();
 
     if (this.player && typeof this.player.loadVideoById === 'function') {
@@ -132,10 +135,12 @@ export class YouTubeController {
         onReady: (event) => {
           this.isReady = true;
           this.checkAndNotifyDuration();
+          this.checkAndNotifyCaptions();
           this.onReady(event);
         },
         onStateChange: (event) => {
           this.checkAndNotifyDuration();
+          this.checkAndNotifyCaptions();
           this.handleStateChange(event.data);
         },
         onError: (event) => {
@@ -155,6 +160,40 @@ export class YouTubeController {
         this.onDurationReady(dur, this.currentVideoId);
       }
     }
+  }
+
+  getCaptionTracks() {
+    try {
+      if (!this.player || typeof this.player.getOption !== 'function') return [];
+      if (typeof this.player.loadModule === 'function') {
+        this.player.loadModule('captions');
+      }
+      const tracks = this.player.getOption('captions', 'tracklist');
+      return Array.isArray(tracks) ? tracks : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  checkAndNotifyCaptions() {
+    if (this._notifiedCaptionsForVideo === this.currentVideoId) return;
+    const tracks = this.getCaptionTracks();
+    if (tracks.length > 0) {
+      this._notifiedCaptionsForVideo = this.currentVideoId;
+      this.onCaptionTracksReady(tracks, this.currentVideoId);
+    }
+  }
+
+  setCaptionTrack(languageCode) {
+    try {
+      if (!this.player || typeof this.player.setOption !== 'function') return;
+      if (languageCode) {
+        if (typeof this.player.loadModule === 'function') {
+          this.player.loadModule('captions');
+        }
+        this.player.setOption('captions', 'track', { languageCode });
+      }
+    } catch (e) {}
   }
 
   handleStateChange(state) {

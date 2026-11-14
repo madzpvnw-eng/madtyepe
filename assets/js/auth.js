@@ -16,6 +16,7 @@ import {
   getFirestore,
   doc,
   getDoc,
+  getDocs,
   getDocFromServer,
   setDoc,
   updateDoc,
@@ -23,11 +24,14 @@ import {
   collection,
   query,
   where,
+  orderBy,
   limit,
   onSnapshot,
   serverTimestamp,
 } from 'firebase/firestore';
 import firebaseConfig from '../../firebase-applet-config.json';
+
+export const ADMIN_EMAIL = 'madzpvnw@gmail.com';
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
@@ -161,8 +165,22 @@ export class AuthManager {
     }
   }
 
+  isAdminUser() {
+    return Boolean(
+      this.user &&
+      this.user.emailVerified &&
+      String(this.user.email || '').trim().toLowerCase() === ADMIN_EMAIL
+    );
+  }
+
   async signInWithGoogle() {
     try {
+      try {
+        Object.keys(sessionStorage)
+          .filter((k) => k.startsWith('madtype_login_recorded_'))
+          .forEach((k) => sessionStorage.removeItem(k));
+      } catch (e) {}
+
       const result = await signInWithPopup(auth, this.provider);
       return { success: true, user: result.user };
     } catch (error) {
@@ -270,6 +288,114 @@ export class AuthManager {
         }
       }
     }
+
+    // 3. Login Audit Log (/login_logs/{uid}) for Admin View
+    if (email && email.length >= 3 && user.emailVerified) {
+      await this.recordLoginLog(user);
+    }
+  }
+
+  async recordLoginLog(user) {
+    const uid = sanitizeId(user.uid, 128);
+    const displayName = (user.displayName || user.email?.split('@')[0] || 'Pengguna madtype').trim().slice(0, 120) || 'Pengguna madtype';
+    const photoURL = (user.photoURL || '').trim().slice(0, 500);
+    const email = (user.email || '').trim().slice(0, 254);
+    const providerId = String(user.providerData?.[0]?.providerId || 'google.com').trim().slice(0, 64) || 'google.com';
+
+    if (!email || email.length < 3) return;
+
+    const logPath = `login_logs/${uid}`;
+    const logRef = doc(db, 'login_logs', uid);
+
+    let logSnap;
+    try {
+      logSnap = await getDoc(logRef);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.GET, logPath);
+    }
+
+    const sessionKey = `madtype_login_recorded_${uid}`;
+    let alreadyRecordedInSession = false;
+    try {
+      alreadyRecordedInSession = sessionStorage.getItem(sessionKey) === '1';
+    } catch (e) {}
+
+    if (!logSnap.exists()) {
+      try {
+        await setDoc(logRef, {
+          uid,
+          displayName,
+          email,
+          emailVerified: Boolean(user.emailVerified),
+          photoURL,
+          providerId,
+          loginCount: 1,
+          firstLoginAt: serverTimestamp(),
+          lastLoginAt: serverTimestamp(),
+        });
+        try {
+          sessionStorage.setItem(sessionKey, '1');
+        } catch (e) {}
+      } catch (err) {
+        handleFirestoreError(err, OperationType.CREATE, logPath);
+      }
+    } else if (!alreadyRecordedInSession) {
+      const prevData = logSnap.data() || {};
+      const prevCount = Math.max(1, Math.min(999999, Math.round(Number(prevData.loginCount) || 1)));
+      try {
+        await updateDoc(logRef, {
+          displayName,
+          email,
+          emailVerified: Boolean(user.emailVerified),
+          photoURL,
+          providerId,
+          loginCount: prevCount + 1,
+          lastLoginAt: serverTimestamp(),
+        });
+        try {
+          sessionStorage.setItem(sessionKey, '1');
+        } catch (e) {}
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, logPath);
+      }
+    }
+  }
+
+  async fetchAllLoginLogs() {
+    if (!this.authReady || !this.isAdminUser()) return [];
+    const logsPath = 'login_logs';
+    try {
+      const q = query(
+        collection(db, 'login_logs'),
+        orderBy('lastLoginAt', 'desc'),
+        limit(500)
+      );
+      const snapshot = await getDocs(q);
+      return snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+    } catch (err) {
+      handleFirestoreError(err, OperationType.LIST, logsPath);
+    }
+  }
+
+  subscribeAllLoginLogs(onUpdate = () => {}) {
+    if (!this.authReady || !this.isAdminUser()) return () => {};
+    const logsPath = 'login_logs';
+    const q = query(
+      collection(db, 'login_logs'),
+      orderBy('lastLoginAt', 'desc'),
+      limit(500)
+    );
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const logs = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
+        onUpdate(logs);
+      },
+      (err) => {
+        if (!this.user || !this.isAdminUser()) return;
+        handleFirestoreError(err, OperationType.LIST, logsPath);
+      }
+    );
   }
 
   attachUserListeners(rawUid) {

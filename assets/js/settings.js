@@ -24,6 +24,9 @@ export class SettingsManager {
       skipPunctuation: false,
       syncOffset: 0.0, // seconds
       videoVisible: true,
+      lyricLang: 'auto', // 'auto' or ISO code ('en', 'id', 'tl', 'ja', 'ko', etc.)
+      subtitleLang: 'id', // target subtitle language ISO code
+      showSubtitles: true,
     };
 
     this.settings = this.loadSettings();

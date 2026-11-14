@@ -8,7 +8,7 @@
 import { SettingsManager } from './settings.js';
 import { StatisticsTracker } from './statistics.js';
 import { YouTubeController } from './youtube.js';
-import { LyricsManager } from './lyrics.js';
+import { LyricsManager, LYRIC_LANGUAGES, SUBTITLE_LANGUAGES, getLanguageLabel, normalizeLangCode } from './lyrics.js';
 import { TypingEngine } from './typing.js';
 import { AuthManager } from './auth.js';
 
@@ -79,27 +79,40 @@ class MadtypeApp {
     // Core game rule: song will pause and wait if current line hasn't been typed!
     this.waitForTyping = true;
     this.isWaitingForUser = false;
-    this.showTranslations = true;
+    this.showTranslations = this.settings.get('showSubtitles') !== false;
+    this.lyricLang = this.settings.get('lyricLang') || 'auto';
+    this.subtitleLang = this.settings.get('subtitleLang') || 'id';
+    this.isTranslatingLyrics = false;
     this.autoReplayInterval = null;
     this.isApplyingCloudPrefs = false;
     this.sessionSavedForCurrentRun = false;
     this.currentTypingMode = 'wait';
+    this.isAdminPageOpen = false;
+    this.adminLoginLogs = [];
+    this.unsubAdminLogs = null;
+    this._secretTapCount = 0;
+    this._secretTapTimer = null;
 
     this.initDOM();
+    this.updateSubtitleLanguageDropdown();
     this.initTypingEngine();
     this.initYouTubePlayer();
     this.initAuth();
     this.bindUIEvents();
     this.renderPopularSongPicker();
 
-    // Apply saved theme, practice font, and words-to-type settings
+    // Apply saved theme, practice font, subtitle, and words-to-type settings
     this.applyTheme(this.settings.get('theme') || 'dark');
     this.applyPracticeFont(this.settings.get('fontFamily') || 'Be Vietnam Pro');
     this.applyWordsToType(this.settings.get('wordsToType') || 'all');
+    this.applySubtitleMode(this.showTranslations ? 'show' : 'hide', { silent: true });
+
+    // Check if hidden admin route is requested via URL hash/query
+    this.checkAdminRouteFromLocation();
 
     // Load default song
     const first = DEMO_SONGS[0];
-    this.loadSongById(first.videoId, first.title, first.artist, first.translation, first.duration);
+    this.loadSongById(first.videoId, first.title, first.artist, '', first.duration);
   }
 
   initDOM() {
@@ -123,6 +136,7 @@ class MadtypeApp {
       hudTheaterBtn: document.getElementById('hud-theater-btn'),
 
       // Lyrics & Typing Arena
+      typingArenaSection: document.querySelector('.typing-arena-section'),
       activeLyricDisplay: document.getElementById('active-lyric-display'),
       arenaPlayToggle: document.getElementById('arena-play-toggle'),
       arenaPlayIcon: document.getElementById('arena-play-icon'),
@@ -158,6 +172,9 @@ class MadtypeApp {
       customErrorSound: document.getElementById('custom-error-sound'),
       modeOptionsList: document.getElementById('mode-options-list'),
       subtitleOptionsList: document.getElementById('subtitle-options-list'),
+      lyricLangSelect: document.getElementById('lyric-lang-select'),
+      subtitleLangSelect: document.getElementById('subtitle-lang-select'),
+      subtitleDetectedLang: document.getElementById('subtitle-detected-lang'),
 
       // Modals
       videoPickerModal: document.getElementById('video-picker-modal'),
@@ -190,6 +207,8 @@ class MadtypeApp {
       settingWaitToggle: document.getElementById('setting-wait-for-typing'),
       settingSfxToggle: document.getElementById('setting-sfx-toggle'),
       settingThemeSelect: document.getElementById('setting-theme-select'),
+      settingLyricLangSelect: document.getElementById('setting-lyric-lang-select'),
+      settingSubtitleLangSelect: document.getElementById('setting-subtitle-lang-select'),
       modalOffsetMinus: document.getElementById('modal-offset-minus'),
       modalOffsetPlus: document.getElementById('modal-offset-plus'),
       modalOffsetReset: document.getElementById('modal-offset-reset'),
@@ -236,6 +255,29 @@ class MadtypeApp {
       favCurrentArtist: document.getElementById('fav-current-artist'),
       toggleCurrentFavBtn: document.getElementById('toggle-current-fav-btn'),
       favoritesSongsList: document.getElementById('favorites-songs-list'),
+
+      // Hidden Admin Page Elements
+      vocaLayout: document.querySelector('.voca-layout'),
+      footerBrandSecret: document.getElementById('footer-brand-secret'),
+      adminHiddenPage: document.getElementById('admin-hidden-page'),
+      adminCurrentEmail: document.getElementById('admin-current-email'),
+      adminRefreshBtn: document.getElementById('admin-refresh-btn'),
+      adminExportBtn: document.getElementById('admin-export-btn'),
+      adminBackBtn: document.getElementById('admin-back-btn'),
+      adminGateSignedOut: document.getElementById('admin-gate-signed-out'),
+      adminGoogleSigninBtn: document.getElementById('admin-google-signin-btn'),
+      adminGateDenied: document.getElementById('admin-gate-denied'),
+      adminDeniedEmail: document.getElementById('admin-denied-email'),
+      adminSwitchAccountBtn: document.getElementById('admin-switch-account-btn'),
+      adminDeniedBackBtn: document.getElementById('admin-denied-back-btn'),
+      adminDashboardView: document.getElementById('admin-dashboard-view'),
+      adminStatUsers: document.getElementById('admin-stat-users'),
+      adminStatLogins: document.getElementById('admin-stat-logins'),
+      adminStatToday: document.getElementById('admin-stat-today'),
+      adminStatLatest: document.getElementById('admin-stat-latest'),
+      adminSearchInput: document.getElementById('admin-search-input'),
+      adminSortSelect: document.getElementById('admin-sort-select'),
+      adminAccountsTbody: document.getElementById('admin-accounts-tbody'),
     };
   }
 
@@ -245,6 +287,9 @@ class MadtypeApp {
         this.updateAuthUI(user);
         this.renderHistoryList();
         this.renderFavoritesList();
+        if (this.isAdminPageOpen) {
+          this.syncAdminPageView();
+        }
       },
       onProfileLoaded: (profile) => {
         this.applyCloudPreferences(profile);
@@ -308,16 +353,7 @@ class MadtypeApp {
       },
       onRender: ({ lineIndex, totalLines }) => {
         this.updateBarisCount(lineIndex + 1, totalLines);
-        const curLine = this.lyricsManager.lyricsData[lineIndex];
-        if (this.dom.lyricTranslationText) {
-          if (curLine && curLine.translation) {
-            this.dom.lyricTranslationText.textContent = curLine.translation;
-          } else if (this.currentSong) {
-            this.dom.lyricTranslationText.textContent = `${this.currentSong.title} — ${this.currentSong.artist}`;
-          } else {
-            this.dom.lyricTranslationText.textContent = '';
-          }
-        }
+        this.applySubtitleTrackToDisplay(lineIndex);
       },
     });
 
@@ -341,6 +377,12 @@ class MadtypeApp {
       },
       onDurationReady: (duration, videoId) => {
         this.handleDurationReady(duration, videoId);
+      },
+      onCaptionTracksReady: (tracks, videoId) => {
+        if (this.currentSong?.videoId === videoId) {
+          this.lyricsManager.setYouTubeCaptionTracks(tracks);
+          this.updateSubtitleLanguageDropdown();
+        }
       },
       onStateChange: (state) => {
         this.handlePlayerState(state);
@@ -380,24 +422,16 @@ class MadtypeApp {
   }
 
   bindUIEvents() {
-    // 1. Typing Input Bar events (keep visible typed buffer synchronized; prevent direct paste/IME drift)
+    // 1. Typing Input Bar focus handling (TypingEngine manages keydown, input & IME composition directly)
     if (this.dom.typingInputBar) {
-      this.dom.typingInputBar.addEventListener('input', () => {
-        const expected = this.typingEngine.typedBuffer
-          .slice(0, this.typingEngine.currentCharIndex)
-          .join('');
-        if (this.dom.typingInputBar.value !== expected) {
-          this.dom.typingInputBar.value = expected;
-        }
-      });
-
-      // Keep focus on input bar on container click
-      document.querySelector('.typing-arena-section')?.addEventListener('click', () => {
-        this.dom.typingInputBar.focus();
+      // Keep focus on input bar on arena tap/click (opens tablet virtual keyboard cleanly)
+      this.dom.typingArenaSection?.addEventListener('click', (e) => {
+        if (e.target.closest('#arena-play-toggle')) return;
+        this.dom.typingInputBar.focus({ preventScroll: true });
       });
 
       this.dom.videoWrapper?.addEventListener('click', () => {
-        this.dom.typingInputBar.focus();
+        this.dom.typingInputBar.focus({ preventScroll: true });
       });
     }
 
@@ -747,7 +781,7 @@ class MadtypeApp {
       });
     }
 
-    // Popover 5: Subtitle Option Click
+    // Popover 5: Subtitle Option Click & Language Selectors
     if (this.dom.subtitleOptionsList) {
       this.dom.subtitleOptionsList.querySelectorAll('.popover-option-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
@@ -758,6 +792,24 @@ class MadtypeApp {
         });
       });
     }
+
+    const bindLangSelect = (el, type) => {
+      if (!el) return;
+      el.addEventListener('click', (e) => e.stopPropagation());
+      el.addEventListener('change', (e) => {
+        e.stopPropagation();
+        if (type === 'lyric') {
+          this.applyLyricLanguage(e.target.value);
+        } else {
+          this.applySubtitleTrack(e.target.value);
+        }
+      });
+    };
+
+    bindLangSelect(this.dom.lyricLangSelect, 'lyric');
+    bindLangSelect(this.dom.settingLyricLangSelect, 'lyric');
+    bindLangSelect(this.dom.subtitleLangSelect, 'subtitle');
+    bindLangSelect(this.dom.settingSubtitleLangSelect, 'subtitle');
 
     // Close popovers on click outside
     document.addEventListener('click', (e) => {
@@ -955,8 +1007,102 @@ class MadtypeApp {
       this.dom.customErrorSound.addEventListener('change', () => this.syncPreferencesToCloud());
     }
 
-    // Keyboard Global Shortcuts (Escape to pause/close)
+    // Hidden Admin Page triggers & controls (URL hash, Alt+Shift+A / Ctrl+Alt+A, 5x tap footer brand)
+    window.addEventListener('hashchange', () => {
+      this.checkAdminRouteFromLocation();
+    });
+
+    if (this.dom.footerBrandSecret) {
+      this.dom.footerBrandSecret.addEventListener('click', () => {
+        this._secretTapCount += 1;
+        clearTimeout(this._secretTapTimer);
+        if (this._secretTapCount >= 5) {
+          this._secretTapCount = 0;
+          this.openAdminPage();
+          return;
+        }
+        this._secretTapTimer = setTimeout(() => {
+          this._secretTapCount = 0;
+        }, 2000);
+      });
+    }
+
+    if (this.dom.adminBackBtn) {
+      this.dom.adminBackBtn.addEventListener('click', () => this.closeAdminPage());
+    }
+    if (this.dom.adminDeniedBackBtn) {
+      this.dom.adminDeniedBackBtn.addEventListener('click', () => this.closeAdminPage());
+    }
+
+    const handleAdminGoogleLogin = async () => {
+      const res = await this.authManager.signInWithGoogle();
+      if (res.success) {
+        this.syncAdminPageView();
+      } else if (res.message) {
+        this.showToast(res.message, 'error');
+      }
+    };
+
+    if (this.dom.adminGoogleSigninBtn) {
+      this.dom.adminGoogleSigninBtn.addEventListener('click', handleAdminGoogleLogin);
+    }
+    if (this.dom.adminSwitchAccountBtn) {
+      this.dom.adminSwitchAccountBtn.addEventListener('click', handleAdminGoogleLogin);
+    }
+
+    if (this.dom.adminRefreshBtn) {
+      this.dom.adminRefreshBtn.addEventListener('click', async () => {
+        if (!this.authManager?.isAdminUser()) return;
+        this.dom.adminRefreshBtn.disabled = true;
+        try {
+          this.adminLoginLogs = await this.authManager.fetchAllLoginLogs();
+          this.renderAdminLoginLogs();
+          this.showToast('Daftar akun diperbarui.', 'success');
+        } catch (err) {
+          this.showToast('Gagal memuat ulang data login.', 'error');
+        } finally {
+          this.dom.adminRefreshBtn.disabled = false;
+        }
+      });
+    }
+
+    if (this.dom.adminExportBtn) {
+      this.dom.adminExportBtn.addEventListener('click', () => {
+        this.exportAdminLoginLogsCsv();
+      });
+    }
+
+    if (this.dom.adminSearchInput) {
+      this.dom.adminSearchInput.addEventListener('input', () => {
+        this.renderAdminLoginLogs();
+      });
+    }
+
+    if (this.dom.adminSortSelect) {
+      this.dom.adminSortSelect.addEventListener('change', () => {
+        this.renderAdminLoginLogs();
+      });
+    }
+
+    // Keyboard Global Shortcuts (Escape to pause/close, Alt+Shift+A / Ctrl+Alt+A for hidden admin page)
     window.addEventListener('keydown', (e) => {
+      if ((e.altKey && e.shiftKey && e.key.toLowerCase() === 'a') || (e.ctrlKey && e.altKey && e.key.toLowerCase() === 'a')) {
+        e.preventDefault();
+        if (this.isAdminPageOpen) {
+          this.closeAdminPage();
+        } else {
+          this.openAdminPage();
+        }
+        return;
+      }
+
+      if (this.isAdminPageOpen) {
+        if (e.key === 'Escape') {
+          this.closeAdminPage();
+        }
+        return;
+      }
+
       if (e.key === 'Escape') {
         const hasOpenModal = document.querySelector('.modal-overlay.open');
         const hasOpenPopover = document.querySelector('.voca-popover.open');
@@ -1124,7 +1270,162 @@ class MadtypeApp {
     this.syncPreferencesToCloud();
   }
 
-  applySubtitleMode(mode) {
+  populateLanguageSelectors() {
+    this.updateSubtitleLanguageDropdown();
+  }
+
+  getTextDirection(langCode = '') {
+    const base = String(langCode || '').split(/[-_]/)[0].toLowerCase();
+    return ['ar', 'he', 'fa', 'ur'].includes(base) ? 'rtl' : 'ltr';
+  }
+
+  updateSubtitleLanguageDropdown() {
+    const detected = this.lyricsManager?.detectedSourceLang || '';
+
+    const fillLyricSelect = (selectEl) => {
+      if (!selectEl) return;
+      selectEl.innerHTML = '';
+      LYRIC_LANGUAGES.forEach(({ code, label }) => {
+        const opt = document.createElement('option');
+        opt.value = code;
+        opt.textContent =
+          code === 'auto' && detected
+            ? `${label} (${getLanguageLabel(detected)})`
+            : label;
+        if (code === this.lyricLang) opt.selected = true;
+        selectEl.appendChild(opt);
+      });
+      selectEl.value = this.lyricLang;
+    };
+
+    fillLyricSelect(this.dom.lyricLangSelect);
+    fillLyricSelect(this.dom.settingLyricLangSelect);
+
+    const subtitleOptions = this.lyricsManager
+      ? this.lyricsManager.getAvailableSubtitleOptions(this.currentSong?.videoId, this.lyricLang)
+      : SUBTITLE_LANGUAGES.map(l => ({ ...l, displayLabel: l.label, youtubeLanguageCode: '' }));
+
+    // Ensure current subtitleLang remains selectable even if it came from a regional CC track
+    const hasSelected = subtitleOptions.some(
+      opt => opt.code.toLowerCase() === String(this.subtitleLang || '').toLowerCase()
+    );
+    if (!hasSelected && this.subtitleLang) {
+      subtitleOptions.push({
+        code: this.subtitleLang,
+        label: getLanguageLabel(this.subtitleLang),
+        displayLabel: getLanguageLabel(this.subtitleLang),
+        youtubeLanguageCode: '',
+        isCurated: false,
+        isYouTubeCC: false,
+        isCached: false,
+      });
+    }
+
+    const fillSubtitleSelect = (selectEl) => {
+      if (!selectEl) return;
+      selectEl.innerHTML = '';
+      subtitleOptions.forEach((item) => {
+        const opt = document.createElement('option');
+        opt.value = item.code;
+        opt.textContent = item.displayLabel || item.label;
+        if (item.youtubeLanguageCode) {
+          opt.dataset.youtubeCode = item.youtubeLanguageCode;
+        }
+        opt.dataset.trackSource = item.isCurated
+          ? 'curated'
+          : item.isYouTubeCC
+            ? 'youtube-cc'
+            : item.isCached
+              ? 'cached'
+              : 'translate';
+        if (item.code.toLowerCase() === String(this.subtitleLang || '').toLowerCase()) {
+          opt.selected = true;
+        }
+        selectEl.appendChild(opt);
+      });
+
+      const matched = subtitleOptions.find(
+        opt => opt.code.toLowerCase() === String(this.subtitleLang || '').toLowerCase()
+      );
+      if (matched) {
+        selectEl.value = matched.code;
+      }
+    };
+
+    fillSubtitleSelect(this.dom.subtitleLangSelect);
+    fillSubtitleSelect(this.dom.settingSubtitleLangSelect);
+
+    if (this.dom.subtitleDetectedLang) {
+      if (this.lyricLang === 'auto' && detected) {
+        this.dom.subtitleDetectedLang.textContent = `Bahasa lirik terdeteksi: ${getLanguageLabel(detected)}`;
+      } else {
+        this.dom.subtitleDetectedLang.textContent = '';
+      }
+    }
+  }
+
+  applyLyricLanguage(langCode, options = {}) {
+    if (!langCode) return;
+    const normalized = langCode === 'auto' ? 'auto' : (normalizeLangCode(langCode) || langCode);
+    this.lyricLang = normalized;
+    this.settings.set('lyricLang', normalized);
+
+    this.updateSubtitleLanguageDropdown();
+    this.applySubtitleTrackToDisplay(this.typingEngine?.currentLineIndex || 0);
+    this.syncPreferencesToCloud();
+    this.refreshSubtitleTranslations();
+
+    if (!options.silent && !this.isApplyingCloudPrefs) {
+      this.showToast(`Bahasa Lirik: ${getLanguageLabel(normalized)}`, 'info');
+    }
+  }
+
+  applySubtitleLanguage(langCode, options = {}) {
+    return this.applySubtitleTrack(langCode, options);
+  }
+
+  applySubtitleTrack(langCode, options = {}) {
+    if (!langCode) return;
+    const available = this.lyricsManager
+      ? this.lyricsManager.getAvailableSubtitleOptions(this.currentSong?.videoId, this.lyricLang)
+      : [];
+    const exactMatch = available.find(o => o.code.toLowerCase() === String(langCode).toLowerCase());
+    const normalized = exactMatch ? exactMatch.code : (normalizeLangCode(langCode) || langCode);
+
+    this.subtitleLang = normalized;
+    this.settings.set('subtitleLang', normalized);
+
+    // Automatically show subtitles if user actively chooses a subtitle language
+    if (!this.showTranslations && !options.silent && !this.isApplyingCloudPrefs) {
+      this.applySubtitleMode('show', { silent: true });
+    }
+
+    // Sync YouTube IFrame closed-caption track if available
+    const selectedTrackMeta = available.find(o => o.code.toLowerCase() === normalized.toLowerCase());
+    if (this.yt && typeof this.yt.setCaptionTrack === 'function') {
+      this.yt.setCaptionTrack(selectedTrackMeta?.youtubeLanguageCode || normalized);
+    }
+
+    // Apply cached/curated subtitle track immediately to active lyrics if present
+    const activeIdx = this.typingEngine?.currentLineIndex || 0;
+    const trackResult = this.lyricsManager
+      ? this.lyricsManager.applySubtitleTrackToLyrics(this.lyricLang, normalized)
+      : { hit: false };
+
+    this.updateSubtitleLanguageDropdown();
+    this.applySubtitleTrackToDisplay(activeIdx);
+    this.syncPreferencesToCloud();
+
+    if (!trackResult.hit) {
+      this.refreshSubtitleTranslations();
+    }
+
+    if (!options.silent && !this.isApplyingCloudPrefs) {
+      this.showToast(`Bahasa Subtitle: ${getLanguageLabel(normalized)}`, 'info');
+    }
+  }
+
+  applySubtitleMode(mode, options = {}) {
     if (!mode) return;
 
     if (this.dom.subtitleOptionsList) {
@@ -1138,10 +1439,116 @@ class MadtypeApp {
     }
 
     this.showTranslations = mode === 'show';
-    if (this.dom.lyricTranslationText) {
-      this.dom.lyricTranslationText.style.display = this.showTranslations ? 'block' : 'none';
+    this.settings.set('showSubtitles', this.showTranslations);
+    this.syncPreferencesToCloud();
+
+    this.applySubtitleTrackToDisplay(this.typingEngine?.currentLineIndex || 0);
+
+    if (this.showTranslations && this.lyricsManager.lyricsData.length > 0) {
+      const curLine = this.lyricsManager.lyricsData[this.typingEngine?.currentLineIndex || 0];
+      if (curLine && !curLine.translation) {
+        this.refreshSubtitleTranslations();
+      }
     }
-    this.showToast(this.showTranslations ? 'Terjemahan lirik diaktifkan' : 'Terjemahan disembunyikan', 'info');
+
+    if (!options.silent && !this.isApplyingCloudPrefs) {
+      this.showToast(this.showTranslations ? 'Subtitle arti lirik diaktifkan' : 'Subtitle disembunyikan', 'info');
+    }
+  }
+
+  updateActiveSubtitleDisplay(lineIndex = 0) {
+    this.applySubtitleTrackToDisplay(lineIndex);
+  }
+
+  applySubtitleTrackToDisplay(lineIndex = 0) {
+    const activeLyricLang =
+      (this.lyricLang === 'auto' ? this.lyricsManager?.detectedSourceLang : this.lyricLang) || 'auto';
+    const activeSubLang = this.subtitleLang || 'id';
+
+    if (this.dom.typingArenaSection) {
+      this.dom.typingArenaSection.setAttribute('data-lyric-lang', activeLyricLang);
+      this.dom.typingArenaSection.setAttribute('data-subtitle-lang', activeSubLang);
+      this.dom.typingArenaSection.setAttribute('data-subtitle-visible', String(Boolean(this.showTranslations)));
+    }
+
+    if (this.dom.activeLyricDisplay) {
+      if (activeLyricLang !== 'auto') {
+        this.dom.activeLyricDisplay.setAttribute('lang', activeLyricLang);
+      } else {
+        this.dom.activeLyricDisplay.removeAttribute('lang');
+      }
+      this.dom.activeLyricDisplay.setAttribute('dir', this.getTextDirection(activeLyricLang));
+    }
+
+    if (!this.dom.lyricTranslationText) return;
+
+    this.dom.lyricTranslationText.setAttribute('lang', activeSubLang);
+    this.dom.lyricTranslationText.setAttribute('dir', this.getTextDirection(activeSubLang));
+    this.dom.lyricTranslationText.setAttribute('data-subtitle-track', activeSubLang);
+
+    if (!this.showTranslations) {
+      this.dom.lyricTranslationText.style.display = 'none';
+      return;
+    }
+
+    this.dom.lyricTranslationText.style.display = 'block';
+    const lyrics = this.lyricsManager?.lyricsData || [];
+    const curLine = lyrics[lineIndex];
+
+    if (!curLine) {
+      this.dom.lyricTranslationText.textContent = '';
+      return;
+    }
+
+    if (curLine.translation) {
+      this.dom.lyricTranslationText.textContent = curLine.translation;
+    } else if (this.isTranslatingLyrics) {
+      this.dom.lyricTranslationText.textContent = 'Menerjemahkan subtitle...';
+    } else {
+      this.dom.lyricTranslationText.textContent = '';
+    }
+  }
+
+  async refreshSubtitleTranslations() {
+    if (!this.lyricsManager?.lyricsData || this.lyricsManager.lyricsData.length === 0) {
+      this.updateSubtitleLanguageDropdown();
+      this.applySubtitleTrackToDisplay(0);
+      return;
+    }
+
+    this.isTranslatingLyrics = true;
+    const activeIdx = this.typingEngine?.currentLineIndex || 0;
+    this.applySubtitleTrackToDisplay(activeIdx);
+
+    let lastDetectedLang = this.lyricsManager.detectedSourceLang || '';
+
+    try {
+      const result = await this.lyricsManager.translateCurrentLyrics(
+        this.lyricLang,
+        this.subtitleLang,
+        {
+          priorityIndex: activeIdx,
+          onBatchComplete: ({ detectedLang }) => {
+            const curIdx = this.typingEngine?.currentLineIndex || 0;
+            if (detectedLang && detectedLang !== lastDetectedLang) {
+              lastDetectedLang = detectedLang;
+              this.updateSubtitleLanguageDropdown();
+            }
+            this.applySubtitleTrackToDisplay(curIdx);
+          },
+        }
+      );
+
+      if (!result?.cancelled) {
+        this.isTranslatingLyrics = false;
+        this.updateSubtitleLanguageDropdown();
+        this.applySubtitleTrackToDisplay(this.typingEngine?.currentLineIndex || 0);
+      }
+    } catch (err) {
+      console.warn('Subtitle translation error:', err);
+      this.isTranslatingLyrics = false;
+      this.applySubtitleTrackToDisplay(this.typingEngine?.currentLineIndex || 0);
+    }
   }
 
   clearAutoReplay() {
@@ -1263,6 +1670,11 @@ class MadtypeApp {
       this.typingEngine.syncToLine(idx);
       this.updateBarisCount(idx + 1, res.lyrics.length);
     }
+
+    // Refresh dropdown & display container attributes, then translate/apply active track
+    this.updateSubtitleLanguageDropdown();
+    this.applySubtitleTrackToDisplay(this.typingEngine?.currentLineIndex || 0);
+    this.refreshSubtitleTranslations();
   }
 
   /**
@@ -1308,9 +1720,13 @@ class MadtypeApp {
         this.dom.lyricsManualSearchInput.value = `${artist} ${title}`.trim();
       }
 
-      // Update subtitle/translation
+      // Clear previous subtitle while loading lyrics & translating
+      this.lyricsManager.activeVideoId = videoId;
+      this.lyricsManager.clearSubtitleTracks();
+      this.updateSubtitleLanguageDropdown();
+      this.applySubtitleTrackToDisplay(0);
       if (this.dom.lyricTranslationText) {
-        this.dom.lyricTranslationText.textContent = presetTranslation || `${title} — ${artist}`;
+        this.dom.lyricTranslationText.textContent = this.showTranslations ? 'Memuat subtitle...' : '';
       }
 
       // Fetch lyrics matching videoId + duration + title/artist
@@ -1327,6 +1743,9 @@ class MadtypeApp {
         this.showToast(`Teks ${modeLabel} dimuat untuk "${title}"!`, 'success');
       } else {
         this.typingEngine.setLyrics([], 'Teks/lirik otomatis tidak ditemukan. Klik "Video ▾ → Sesuaikan Teks / Lirik" untuk mencari atau menempel Transkrip YouTube.');
+        if (this.dom.lyricTranslationText) {
+          this.dom.lyricTranslationText.textContent = '';
+        }
         this.renderLyricsCandidates();
         this.updateTimeDisplay(0, duration || (this.yt ? this.yt.getDuration() : 0));
         this.showToast(`Lirik tidak ditemukan otomatis untuk "${title}". Anda bisa menempel transkrip YouTube.`, 'info');
@@ -1517,6 +1936,9 @@ class MadtypeApp {
         errorSound: this.settings.get('errorSound') || 'error',
         waitForTyping: this.waitForTyping,
         soundFx: Boolean(this.settings.get('soundFx')),
+        lyricLang: this.lyricLang || 'auto',
+        subtitleLang: this.subtitleLang || 'id',
+        showSubtitles: Boolean(this.showTranslations),
       })
       .catch((err) => console.warn('Cloud preferences sync skipped:', err));
   }
@@ -1548,6 +1970,15 @@ class MadtypeApp {
       if (typeof profile.soundFx === 'boolean') {
         this.settings.set('soundFx', profile.soundFx);
         if (this.dom.settingSfxToggle) this.dom.settingSfxToggle.checked = profile.soundFx;
+      }
+      if (profile.lyricLang) {
+        this.applyLyricLanguage(profile.lyricLang, { silent: true });
+      }
+      if (profile.subtitleLang) {
+        this.applySubtitleLanguage(profile.subtitleLang, { silent: true });
+      }
+      if (typeof profile.showSubtitles === 'boolean') {
+        this.applySubtitleMode(profile.showSubtitles ? 'show' : 'hide', { silent: true });
       }
     } finally {
       this.isApplyingCloudPrefs = false;
@@ -1797,6 +2228,289 @@ class MadtypeApp {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  // =========================================================================
+  // Hidden Admin Page (Login Accounts Audit View)
+  // =========================================================================
+  checkAdminRouteFromLocation() {
+    const hash = (window.location.hash || '').toLowerCase();
+    const params = new URLSearchParams(window.location.search || '');
+    const isAdminRoute = hash === '#/admin' || hash === '#admin' || params.get('page') === 'admin';
+
+    if (isAdminRoute && !this.isAdminPageOpen) {
+      this.openAdminPage({ skipHashUpdate: true });
+    } else if (!isAdminRoute && this.isAdminPageOpen) {
+      this.closeAdminPage({ skipHashUpdate: true });
+    }
+  }
+
+  openAdminPage({ skipHashUpdate = false } = {}) {
+    if (!this.dom.adminHiddenPage) return;
+
+    this.closeAllModals();
+    this.closeAllPopovers();
+    try {
+      this.yt?.pause();
+    } catch (e) {}
+
+    this.isAdminPageOpen = true;
+    if (this.dom.vocaLayout) {
+      this.dom.vocaLayout.style.display = 'none';
+    }
+    this.dom.adminHiddenPage.style.display = 'flex';
+    this.dom.adminHiddenPage.setAttribute('aria-hidden', 'false');
+
+    if (!skipHashUpdate && window.location.hash !== '#/admin') {
+      try {
+        history.pushState(null, '', '#/admin');
+      } catch (e) {
+        window.location.hash = '#/admin';
+      }
+    }
+
+    this.syncAdminPageView();
+  }
+
+  closeAdminPage({ skipHashUpdate = false } = {}) {
+    this.isAdminPageOpen = false;
+
+    if (this.unsubAdminLogs) {
+      this.unsubAdminLogs();
+      this.unsubAdminLogs = null;
+    }
+
+    if (this.dom.adminHiddenPage) {
+      this.dom.adminHiddenPage.style.display = 'none';
+      this.dom.adminHiddenPage.setAttribute('aria-hidden', 'true');
+    }
+    if (this.dom.vocaLayout) {
+      this.dom.vocaLayout.style.display = '';
+    }
+
+    if (!skipHashUpdate) {
+      const hash = (window.location.hash || '').toLowerCase();
+      if (hash === '#/admin' || hash === '#admin') {
+        try {
+          history.replaceState(null, '', window.location.pathname + window.location.search);
+        } catch (e) {
+          window.location.hash = '';
+        }
+      }
+    }
+  }
+
+  syncAdminPageView() {
+    if (!this.isAdminPageOpen) return;
+
+    const user = this.authManager?.user || null;
+    const isAdmin = Boolean(this.authManager?.isAdminUser());
+
+    if (this.dom.adminGateSignedOut) {
+      this.dom.adminGateSignedOut.style.display = !user ? 'flex' : 'none';
+    }
+    if (this.dom.adminGateDenied) {
+      this.dom.adminGateDenied.style.display = user && !isAdmin ? 'flex' : 'none';
+    }
+    if (this.dom.adminDashboardView) {
+      this.dom.adminDashboardView.style.display = isAdmin ? 'flex' : 'none';
+    }
+
+    if (this.dom.adminCurrentEmail) {
+      this.dom.adminCurrentEmail.style.display = user ? 'inline-flex' : 'none';
+      this.dom.adminCurrentEmail.textContent = user?.email || '';
+    }
+    if (this.dom.adminRefreshBtn) {
+      this.dom.adminRefreshBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+    }
+    if (this.dom.adminExportBtn) {
+      this.dom.adminExportBtn.style.display = isAdmin ? 'inline-flex' : 'none';
+    }
+    if (this.dom.adminDeniedEmail) {
+      this.dom.adminDeniedEmail.textContent = user?.email || '-';
+    }
+
+    if (!isAdmin) {
+      if (this.unsubAdminLogs) {
+        this.unsubAdminLogs();
+        this.unsubAdminLogs = null;
+      }
+      this.adminLoginLogs = [];
+      return;
+    }
+
+    if (!this.unsubAdminLogs) {
+      if (this.dom.adminAccountsTbody) {
+        this.dom.adminAccountsTbody.innerHTML = '<tr><td colspan="6" class="admin-empty-cell">Memuat daftar akun...</td></tr>';
+      }
+      this.unsubAdminLogs = this.authManager.subscribeAllLoginLogs((logs) => {
+        this.adminLoginLogs = Array.isArray(logs) ? logs : [];
+        this.renderAdminLoginLogs();
+      });
+    } else {
+      this.renderAdminLoginLogs();
+    }
+  }
+
+  _toMillis(ts) {
+    if (!ts) return 0;
+    if (typeof ts.toMillis === 'function') return ts.toMillis();
+    if (typeof ts.seconds === 'number') return ts.seconds * 1000;
+    const parsed = Date.parse(ts);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  _formatAdminDateTime(ms) {
+    if (!ms) return '-';
+    try {
+      return new Intl.DateTimeFormat('id-ID', {
+        day: '2-digit',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }).format(new Date(ms));
+    } catch (e) {
+      return new Date(ms).toLocaleString();
+    }
+  }
+
+  _formatRelativeTime(ms) {
+    if (!ms) return '';
+    const diffSec = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+    if (diffSec < 60) return 'Baru saja';
+    const diffMin = Math.floor(diffSec / 60);
+    if (diffMin < 60) return `${diffMin} menit lalu`;
+    const diffHours = Math.floor(diffMin / 60);
+    if (diffHours < 24) return `${diffHours} jam lalu`;
+    const diffDays = Math.floor(diffHours / 24);
+    return `${diffDays} hari lalu`;
+  }
+
+  renderAdminLoginLogs() {
+    if (!this.dom.adminAccountsTbody) return;
+
+    const logs = this.adminLoginLogs || [];
+    const now = Date.now();
+    const totalUsers = logs.length;
+    const totalLogins = logs.reduce((sum, row) => sum + (Number(row.loginCount) || 1), 0);
+    const activeToday = logs.filter((row) => now - this._toMillis(row.lastLoginAt) <= 86400000).length;
+    const latestMs = logs.reduce((max, row) => Math.max(max, this._toMillis(row.lastLoginAt)), 0);
+
+    if (this.dom.adminStatUsers) this.dom.adminStatUsers.textContent = totalUsers;
+    if (this.dom.adminStatLogins) this.dom.adminStatLogins.textContent = totalLogins;
+    if (this.dom.adminStatToday) this.dom.adminStatToday.textContent = activeToday;
+    if (this.dom.adminStatLatest) {
+      this.dom.adminStatLatest.textContent = latestMs ? this._formatRelativeTime(latestMs) : '-';
+    }
+
+    const q = (this.dom.adminSearchInput?.value || '').trim().toLowerCase();
+    const sortMode = this.dom.adminSortSelect?.value || 'lastLoginDesc';
+
+    const filtered = logs.filter((row) => {
+      if (!q) return true;
+      const hay = `${row.displayName || ''} ${row.email || ''} ${row.uid || ''}`.toLowerCase();
+      return hay.includes(q);
+    });
+
+    filtered.sort((a, b) => {
+      if (sortMode === 'firstLoginDesc') {
+        return this._toMillis(b.firstLoginAt) - this._toMillis(a.firstLoginAt);
+      }
+      if (sortMode === 'loginCountDesc') {
+        return (Number(b.loginCount) || 0) - (Number(a.loginCount) || 0);
+      }
+      if (sortMode === 'nameAsc') {
+        return String(a.displayName || '').localeCompare(String(b.displayName || ''));
+      }
+      return this._toMillis(b.lastLoginAt) - this._toMillis(a.lastLoginAt);
+    });
+
+    if (filtered.length === 0) {
+      this.dom.adminAccountsTbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="admin-empty-cell">
+            ${q ? 'Tidak ada akun yang cocok dengan pencarian.' : 'Belum ada akun yang tercatat login.'}
+          </td>
+        </tr>
+      `;
+      return;
+    }
+
+    this.dom.adminAccountsTbody.innerHTML = '';
+    filtered.forEach((row) => {
+      const tr = document.createElement('tr');
+      const name = row.displayName || 'Pengguna';
+      const initial = name.trim().charAt(0).toUpperCase() || 'M';
+      const avatarHtml = row.photoURL
+        ? `<img src="${this.escapeHtml(row.photoURL)}" alt="${this.escapeHtml(name)}" referrerpolicy="no-referrer" />`
+        : this.escapeHtml(initial);
+      const firstMs = this._toMillis(row.firstLoginAt);
+      const lastMs = this._toMillis(row.lastLoginAt);
+      const shortUid = row.uid && row.uid.length > 14 ? `${row.uid.slice(0, 12)}...` : (row.uid || '-');
+
+      tr.innerHTML = `
+        <td>
+          <div class="admin-user-cell">
+            <span class="admin-user-avatar">${avatarHtml}</span>
+            <div>
+              <div class="admin-user-name">${this.escapeHtml(name)}</div>
+              <div class="admin-user-provider">${this.escapeHtml(row.providerId || 'google.com')}</div>
+            </div>
+          </div>
+        </td>
+        <td>
+          <div>${this.escapeHtml(row.email || '-')}</div>
+          ${row.emailVerified ? '<span class="admin-verified-pill">✓ Verified</span>' : ''}
+        </td>
+        <td>
+          <code class="admin-uid-code" title="${this.escapeHtml(row.uid || '')}">${this.escapeHtml(shortUid)}</code>
+        </td>
+        <td>
+          <span class="admin-count-badge tabular-nums">${Number(row.loginCount) || 1}×</span>
+        </td>
+        <td>
+          <span>${this.escapeHtml(this._formatAdminDateTime(firstMs))}</span>
+        </td>
+        <td>
+          <span>${this.escapeHtml(this._formatAdminDateTime(lastMs))}</span>
+          <span class="admin-time-sub">${this.escapeHtml(this._formatRelativeTime(lastMs))}</span>
+        </td>
+      `;
+      this.dom.adminAccountsTbody.appendChild(tr);
+    });
+  }
+
+  exportAdminLoginLogsCsv() {
+    if (!this.authManager?.isAdminUser() || !this.adminLoginLogs?.length) {
+      this.showToast('Belum ada data akun untuk diekspor.', 'info');
+      return;
+    }
+
+    const csvCell = (val) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    const headers = ['UID', 'Nama', 'Email', 'Terverifikasi', 'Provider', 'Total Login', 'Pertama Masuk', 'Terakhir Masuk'];
+    const rows = this.adminLoginLogs.map((r) => [
+      csvCell(r.uid || ''),
+      csvCell(r.displayName || ''),
+      csvCell(r.email || ''),
+      csvCell(r.emailVerified ? 'Ya' : 'Tidak'),
+      csvCell(r.providerId || 'google.com'),
+      csvCell(Number(r.loginCount) || 1),
+      csvCell(this._formatAdminDateTime(this._toMillis(r.firstLoginAt))),
+      csvCell(this._formatAdminDateTime(this._toMillis(r.lastLoginAt))),
+    ].join(','));
+
+    const csv = [headers.map(csvCell).join(','), ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `madtype-login-accounts-${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    this.showToast('File CSV berhasil diunduh.', 'success');
   }
 }
 
